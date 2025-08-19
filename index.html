@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Galaxy Visualization</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="ui" id="ui" data-mode="solar">
+    <h1>3D Space Viz <span class="pill" id="modePill">Solar System</span></h1>
+
+    <div class="row mode-toggle">
+      <button id="btnSolar" class="active">Solar System</button>
+      <button id="btnGalaxy">Milky Way</button>
+    </div>
+
+      <div class="row mode-solar">
+        <button id="btnPlay" class="primary">⏸ Pause</button>
+        <button id="btnTour">Auto tour</button>
+      </div>
+
+      <div class="row mode-solar">
+        <label for="focusSelect">Focus</label>
+        <select id="focusSelect">
+          <option value="Sun">Sun</option>
+          <option value="Mercury">Mercury</option>
+          <option value="Venus">Venus</option>
+          <option value="Earth">Earth</option>
+          <option value="Mars">Mars</option>
+          <option value="Jupiter">Jupiter</option>
+          <option value="Saturn">Saturn</option>
+          <option value="Uranus">Uranus</option>
+          <option value="Neptune">Neptune</option>
+        </select>
+        <label><input type="checkbox" id="followSelection" checked /> Lock camera</label>
+      </div>
+
+    <div class="row mode-solar">
+      <label for="speed">Time speed</label>
+      <input type="range" id="speed" min="0" max="200" value="40" />
+      <span class="pill" id="speedVal">× 40</span>
+    </div>
+
+    <div class="row mode-solar">
+      <label><input type="checkbox" id="showOrbits" checked /> Show orbits</label>
+    </div>
+
+    <div class="row">
+      <label><input type="checkbox" id="showLabels" checked /> Show labels</label>
+    </div>
+
+    <!-- New: Label size slider (applies to both modes) -->
+    <div class="row">
+      <label for="labelScale">Label size</label>
+      <input type="range" id="labelScale" min="50" max="300" value="160" />
+      <span class="pill" id="labelScaleVal">160%</span>
+    </div>
+
+    <div class="row mode-solar">
+      <button id="resetView">Reset View</button>
+    </div>
+
+    <!-- Galaxy-specific controls -->
+    <div class="row mode-galaxy">
+      <label for="galaxyFocus">Focus</label>
+      <select id="galaxyFocus">
+        <option value="core">Galactic Center</option>
+        <option value="sun">Sun (Orion Spur)</option>
+        <option value="wide">Wide View</option>
+      </select>
+      <span class="spacer"></span>
+      <label><input type="checkbox" id="galaxyAutoRotate" checked /> Auto‑rotate</label>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="galaxySpin">Spin speed</label>
+      <input type="range" id="galaxySpin" min="0" max="20" value="5" />
+      <span class="pill" id="galaxySpinVal">× 0.5</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="starBrightness">Star brightness</label>
+      <input type="range" id="starBrightness" min="30" max="130" value="90" />
+      <span class="pill" id="starBrightnessVal">90%</span>
+    </div>
+
+    <div class="small">Drag to rotate · Wheel/pinch to zoom · Right-drag to pan</div>
+  </div>
+
+  <aside class="legend" id="legend">
+    <h2 id="legendTitle">Solar System quick facts</h2>
+    <ul id="legendList">
+      <li>Sizes &amp; distances are <b>not to scale</b> (compressed for visibility).</li>
+      <li>Earth orbits the Sun in ~365 days; Neptune ~165 years.</li>
+      <li>Saturn’s ring stylized; orbits shown as guides.</li>
+    </ul>
+  </aside>
+
+  <div class="footer">Built with Three.js · Educational scale model</div>
+
+    <aside class="info" id="infoPanel">
+      <div class="info-title" id="infoTitle">Sun</div>
+      <div class="info-body">
+        <div><b>Type:</b> G‑type main-sequence star</div>
+        <div><b>Distance from Sun:</b> —</div>
+        <div><b>Orbital period:</b> —</div>
+        <div class="hint">Tip: click a planet or use the Focus dropdown</div>
+      </div>
+    </aside>
+
+  <!-- Bootstrap loader to ensure dependencies load before app.js -->
+  <script>
+  (function(){
+    function load(src){
+      return new Promise(function(resolve, reject){
+        var s = document.createElement('script');
+        s.src = src; s.async = false;
+        s.onload = function(){ resolve(); };
+        s.onerror = function(){ reject(new Error('Failed to load ' + src)); };
+        document.head.appendChild(s);
+      });
+    }
+    (async function(){
+      try {
+        await load('https://unpkg.com/three@0.149.0/build/three.min.js');
+      } catch(e) {
+        await load('https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js');
+      }
+      // Try OrbitControls, but continue even if both CDNs fail (fallback in app.js will handle it)
+      let orbitLoaded = false;
+      try {
+        await load('https://unpkg.com/three@0.149.0/examples/js/controls/OrbitControls.js');
+        orbitLoaded = true;
+      } catch(e1) {
+        try {
+          await load('https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/controls/OrbitControls.js');
+          orbitLoaded = true;
+        } catch(e2) {
+          console.warn('OrbitControls failed to load from CDNs, using BasicOrbitControls fallback.', e2);
+        }
+      }
+      await load('app.js');
+    })();
+  })();
+  </script>
+</body>
+</html>

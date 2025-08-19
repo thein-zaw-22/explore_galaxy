@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node / tooling (not required but common)
+node_modules/
+dist/
+.tmp/
+.cache/
+
+# Logs / env
+*.log
+.env*
+
+
