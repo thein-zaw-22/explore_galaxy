@@ -13,14 +13,14 @@ This is a static site. Serve the folder and open in your browser.
 
 Option A: Python (built‑in on macOS)
 ```bash
-cd /Users/theinzaw/code/Galaxy
+cd $your_code_folder
 python3 -m http.server 8001
 # then open http://localhost:8001
 ```
 
 Option B: Node http-server
 ```bash
-cd /Users/theinzaw/code/Galaxy
+cd $your_code_folder
 npx --yes http-server -p 8001 -c-1 .
 ```
 
