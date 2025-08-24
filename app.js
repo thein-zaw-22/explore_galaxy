@@ -1,784 +1,1004 @@
+// Galaxy Visualization - Modular Version
 /* global THREE */
-// Wrap everything to avoid globals leaking
-(function () {
-  const canvas = document.getElementById("scene");
-  const mouse = new THREE.Vector2();
-  const raycaster = new THREE.Raycaster();
+import { createScene } from './src/core/scene.js';
+import { createCamera } from './src/core/camera.js';
+import { createRenderer } from './src/core/renderer.js';
+import { createLights } from './src/core/lights.js';
+import { BasicOrbitControls } from './src/core/controls.js';
+import { createSolarSystem } from './src/scene/solarSystem.js';
+import { createGalaxy } from './src/scene/galaxy.js';
+import { getUIElements } from './src/ui/elements.js';
+import { setInfoFor, setGalaxyInfo, updateLegend } from './src/ui/info.js';
+import { updateAllLabelScales } from './src/ui/labels.js';
 
-  // --- Renderer ---
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+// Global app state
+let scene, camera, renderer, controls;
+let solarGroup, galaxyGroup, galaxyPoints;
+let orbitLines = [], planetsData = [], labels = [], planets = [], selectables = [];
+let solarMaxDist = 0;
+let sunMilky, sunMilkyLabel, centerLabel, accretionDisk, bulge;
+let armsPoints, bulgePoints, haloPoints, coreGlowSprites = [];
+let spiralArms = [], starFormationRegions = [], dustLanes = null;
+let mode = "solar", focused = "Sun", playing = true, touring = false;
+let tourIndex = 0, tourTimer = 0, timeSpeed = 40;
+let galaxyAutoRotate = true, galaxyRotationSpeed = 0.005, starBrightness = 0.9, labelSizeMultiplier = 1.6;
+let camLerp = 0;
+const CAM_TIME = 0.9;
+let camFromPos = new THREE.Vector3(), camToPos = new THREE.Vector3();
+let targetFrom = new THREE.Vector3(), targetTo = new THREE.Vector3(0, 0, 0);
+const mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
+let uiElements;
+// Reusable temp vector to avoid per-frame allocations
+const _tmpVec3 = new THREE.Vector3();
+// Galaxy tour state
+let galaxyTouring = false, galaxyTourTimer = 0, galaxyTourIdx = 0;
+const galaxyTourSeq = ['core','sun','wide'];
 
-  // --- Scene & Camera ---
-  const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x05070f, 0.0015);
-
-  const camera = new THREE.PerspectiveCamera(
-    55,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    5000
-  );
-  camera.position.set(0, 45, 110);
-
-  // Minimal fallback OrbitControls if examples script fails to load
-  class BasicOrbitControls {
-    constructor(object, domElement){
-      this.object = object;
-      this.domElement = domElement;
-      this.target = new THREE.Vector3();
-      this.enableDamping = true;
-      this.dampingFactor = 0.05;
-      this.minDistance = 5;
-      this.maxDistance = 800;
-
-      this._spherical = new THREE.Spherical();
-      this._spherical.setFromVector3(this.object.position.clone().sub(this.target));
-      this._rotateSpeed = 0.0025;
-      this._panSpeed = 0.0025;
-      this._zoomScale = 1.0;
-      this._deltaTheta = 0;
-      this._deltaPhi = 0;
-      this._panOffset = new THREE.Vector3();
-
-      this._state = 'none'; // 'rotate' | 'pan' | 'none'
-      this._pointer = new THREE.Vector2();
-
-      this._onPointerDown = (e) => {
-        e.preventDefault();
-        this.domElement.setPointerCapture(e.pointerId || 1);
-        if (e.button === 2 || (e.button === 0 && e.ctrlKey)) this._state = 'pan';
-        else this._state = 'rotate';
-        this._pointer.set(e.clientX, e.clientY);
-      };
-      this._onPointerMove = (e) => {
-        if (this._state === 'none') return;
-        const dx = e.clientX - this._pointer.x;
-        const dy = e.clientY - this._pointer.y;
-        this._pointer.set(e.clientX, e.clientY);
-        if (this._state === 'rotate') {
-          this._deltaTheta -= dx * this._rotateSpeed;
-          this._deltaPhi   -= dy * this._rotateSpeed;
-        } else if (this._state === 'pan') {
-          // Pan parallel to screen
-          const offset = new THREE.Vector3();
-          offset.copy(this.object.position).sub(this.target);
-          const targetDistance = offset.length();
-          const panX = (-dx * this._panSpeed) * (targetDistance / 50);
-          const panY = (dy * this._panSpeed) * (targetDistance / 50);
-          const te = this.object.matrix.elements;
-          const xAxis = new THREE.Vector3(te[0], te[1], te[2]);
-          const yAxis = new THREE.Vector3(te[4], te[5], te[6]);
-          xAxis.multiplyScalar(panX);
-          yAxis.multiplyScalar(panY);
-          this._panOffset.add(xAxis).add(yAxis);
-        }
-      };
-      this._onPointerUp = (e) => {
-        this._state = 'none';
-        try { this.domElement.releasePointerCapture(e.pointerId || 1); } catch(_){}
-      };
-      this._onWheel = (e) => {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 1.05 : 0.95;
-        this._zoomScale *= delta;
-      };
-
-      domElement.addEventListener('pointerdown', this._onPointerDown);
-      domElement.addEventListener('pointermove', this._onPointerMove);
-      domElement.addEventListener('pointerup', this._onPointerUp);
-      domElement.addEventListener('wheel', this._onWheel, { passive: false });
-    }
-    update(){
-      // Apply zoom
-      const offset = new THREE.Vector3().copy(this.object.position).sub(this.target);
-      const radius = offset.length() * this._zoomScale;
-      this._zoomScale = 1.0;
-
-      // Apply rotation
-      this._spherical.setFromVector3(offset);
-      this._spherical.theta += this._deltaTheta;
-      this._spherical.phi += this._deltaPhi;
-      const EPS = 1e-6;
-      this._spherical.phi = Math.max(EPS, Math.min(Math.PI - EPS, this._spherical.phi));
-      this._spherical.radius = THREE.MathUtils.clamp(radius, this.minDistance, this.maxDistance);
-
-      // Damping on deltas
-      if (this.enableDamping) {
-        this._deltaTheta *= (1 - this.dampingFactor);
-        this._deltaPhi   *= (1 - this.dampingFactor);
-        this._panOffset.multiplyScalar(1 - this.dampingFactor);
-      } else {
-        this._deltaTheta = 0;
-        this._deltaPhi = 0;
-        this._panOffset.set(0,0,0);
-      }
-
-      // Apply pan to target
-      this.target.add(this._panOffset);
-
-      // Compute new camera position
-      const newPos = new THREE.Vector3().setFromSpherical(this._spherical).add(this.target);
-      this.object.position.copy(newPos);
-      this.object.lookAt(this.target);
-    }
-  }
-
-  // Controls (support both global attachment styles)
-  var ControlsCtor = (window.THREE && THREE.OrbitControls) ? THREE.OrbitControls
-                    : (window.OrbitControls || null);
-  if (!ControlsCtor) {
-    console.warn("OrbitControls script not loaded. Using BasicOrbitControls fallback.");
-  }
-  const controls = ControlsCtor ? new ControlsCtor(camera, renderer.domElement) : new BasicOrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.minDistance = 5;
-  controls.maxDistance = 800;
-
-  // Lights
-  const sunLight = new THREE.PointLight(0xffffff, 2, 0, 2);
-  sunLight.position.set(0, 0, 0);
-  scene.add(sunLight);
-
-  const ambient = new THREE.AmbientLight(0x22334a, 0.6);
-  scene.add(ambient);
-
-  // --- Starfield background ---
-  (function makeStars() {
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 3000;
-    const starPos = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount; i++) {
-      const r = 1000 * (0.8 + 0.2 * Math.random());
-      const u = Math.random();
-      const v = Math.random();
-      const theta = Math.acos(2 * u - 1);
-      const phi = 2 * Math.PI * v;
-      starPos[i * 3 + 0] = r * Math.sin(theta) * Math.cos(phi);
-      starPos[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
-      starPos[i * 3 + 2] = r * Math.cos(theta);
-    }
-    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({
-      color: 0x9db5ff,
-      size: 1.2,
-      sizeAttenuation: true,
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false,
-    });
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
-  })();
-
-  // ======================= SOLAR SYSTEM =======================
-  const solarGroup = new THREE.Group();
-  scene.add(solarGroup);
-
-  // Sun
-  const sun = new THREE.Mesh(
-    new THREE.SphereGeometry(5, 48, 48),
-    new THREE.MeshBasicMaterial({ color: 0xffe08a })
-  );
-  solarGroup.add(sun);
-
-  // Planets (stylized)
-  const planetsData = [
-    { name: "Mercury", radius: 0.25, dist: 9,  color: 0xb1b1b1, periodDays: 88,    au: 0.39, desc: "Smallest planet; no atmosphere to speak of." },
-    { name: "Venus",   radius: 0.40, dist: 12, color: 0xffd7a8, periodDays: 225,   au: 0.72, desc: "Runaway greenhouse; hottest surface." },
-    { name: "Earth",   radius: 0.42, dist: 15, color: 0x6bb6ff, periodDays: 365,   au: 1.00, desc: "Our home; liquid water and life." },
-    { name: "Mars",    radius: 0.32, dist: 18, color: 0xff9b6b, periodDays: 687,   au: 1.52, desc: "The red planet; thin CO₂ atmosphere." },
-    { name: "Jupiter", radius: 1.10, dist: 24, color: 0xf0e0b6, periodDays: 4331,  au: 5.20, desc: "Gas giant; Great Red Spot storm." },
-    { name: "Saturn",  radius: 0.95, dist: 30, color: 0xf1e5c6, periodDays: 10747, au: 9.58, desc: "Spectacular ring system (stylized here)." , hasRing: true },
-    { name: "Uranus",  radius: 0.60, dist: 36, color: 0xa6e7ff, periodDays: 30589, au: 19.2, desc: "Ice giant; tipped on its side." },
-    { name: "Neptune", radius: 0.58, dist: 42, color: 0x84a7ff, periodDays: 59800, au: 30.1, desc: "Farthest planet; supersonic winds." },
-  ];
-
-  // Maximum orbital radius (for framing)
-  const SOLAR_MAX_DIST = Math.max.apply(null, planetsData.map(p => p.dist));
-
-  const orbitLines = [];
-  const labels = [];
-  const planets = [];
-  const selectables = [];
-
-  function makeLabel(text, scale = 0.1) {
-    const padding = 6, fontSize = 36;
-    const c = document.createElement("canvas");
-    const ctx = c.getContext("2d");
-    ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto`;
-    const w = Math.ceil(ctx.measureText(text).width + padding * 2);
-    const h = fontSize + padding * 2;
-    c.width = w; c.height = h;
-    const ctx2 = c.getContext("2d");
-    ctx2.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto`;
-    ctx2.fillStyle = "rgba(0,0,0,.45)";
-    ctx2.fillRect(0, 0, w, h);
-    ctx2.fillStyle = "#eaf3ff";
-    ctx2.fillText(text, padding, fontSize + padding - 8);
-    const tex = new THREE.CanvasTexture(c);
-    tex.minFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-    const spr = new THREE.Sprite(mat);
-    const unit = scale * 0.03;
-    spr.userData.label = { w, h, unit };
-    spr.scale.set(w * unit, h * unit, 1);
-    return spr;
-  }
-
-  planetsData.forEach((p) => {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(p.radius, 32, 32),
-      new THREE.MeshStandardMaterial({ color: p.color, metalness: 0.1, roughness: 0.8 })
-    );
-    mesh.userData = {
-      dist: p.dist, periodDays: p.periodDays, name: p.name, theta: Math.random() * Math.PI * 2
+// Simple settings persistence
+const SETTINGS_KEY = 'spaceviz.settings.v1';
+function saveSettings() {
+  try {
+    const s = {
+      mode,
+      // Solar
+      speed: document.getElementById('speed')?.value,
+      showOrbits: document.getElementById('showOrbits')?.checked,
+      showLabels: document.getElementById('showLabels')?.checked,
+      labelScale: document.getElementById('labelScale')?.value,
+      followSelection: document.getElementById('followSelection')?.checked,
+      // Galaxy
+      galaxyFocus: document.getElementById('galaxyFocus')?.value,
+      galaxyAutoRotate: !!galaxyAutoRotate,
+      galaxySpin: document.getElementById('galaxySpin')?.value,
+      starBrightness: document.getElementById('starBrightness')?.value,
+      galaxyTilt: document.getElementById('galaxyTilt')?.value,
+      starSize: document.getElementById('starSize')?.value,
+      nebulaVisibility: document.getElementById('nebulaVisibility')?.value,
+      dustLaneVisibility: document.getElementById('dustLaneVisibility')?.value,
+      showGalaxyArms: document.getElementById('showGalaxyArms')?.checked,
+      showSunOrbit: document.getElementById('showSunOrbit')?.checked,
+      armsOpacity: document.getElementById('armsOpacity')?.value,
+      bulgeOpacity: document.getElementById('bulgeOpacity')?.value,
+      haloOpacity: document.getElementById('haloOpacity')?.value,
+      coreGlow: document.getElementById('coreGlow')?.value,
+      fogDensity: document.getElementById('fogDensity')?.value
     };
-    mesh.userData.meta = p;
-    solarGroup.add(mesh);
-    planets.push(mesh);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch(_){}
+}
+function applySettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) { el.value = v; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); } };
+    const setChk = (id, v) => { const el = document.getElementById(id); if (el && v != null) { el.checked = !!v; el.dispatchEvent(new Event('change')); } };
+    setVal('speed', s.speed); setChk('showOrbits', s.showOrbits); setChk('showLabels', s.showLabels);
+    setVal('labelScale', s.labelScale); setChk('followSelection', s.followSelection);
+    setVal('galaxySpin', s.galaxySpin);
+    if (typeof s.galaxyAutoRotate === 'boolean') {
+      galaxyAutoRotate = !!s.galaxyAutoRotate;
+      const sw = document.getElementById('galaxyAutoRotate');
+      const lb = document.getElementById('galaxyAutoRotateLabel');
+      if (sw) sw.checked = galaxyAutoRotate;
+      if (lb) lb.classList.toggle('active', galaxyAutoRotate);
+    }
+    setVal('starBrightness', s.starBrightness); setVal('galaxyTilt', s.galaxyTilt);
+    setVal('starSize', s.starSize); setVal('nebulaVisibility', s.nebulaVisibility);
+    setVal('dustLaneVisibility', s.dustLaneVisibility); setChk('showGalaxyArms', s.showGalaxyArms);
+    setChk('showSunOrbit', s.showSunOrbit); setVal('armsOpacity', s.armsOpacity);
+    setVal('bulgeOpacity', s.bulgeOpacity); setVal('haloOpacity', s.haloOpacity);
+    setVal('coreGlow', s.coreGlow); setVal('fogDensity', s.fogDensity);
+    if (s.mode === 'galaxy') setMode('galaxy');
+    if (s.galaxyFocus) { const gf = document.getElementById('galaxyFocus'); if (gf) gf.value = s.galaxyFocus; }
+  } catch(_){}
+}
 
-    // Orbit
-    const circle = new THREE.EllipseCurve(0, 0, p.dist, p.dist, 0, Math.PI * 2, false, 0);
-    const points = circle.getPoints(256).map(pt => new THREE.Vector3(pt.x, 0, pt.y));
-    const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const orbitMat = new THREE.LineBasicMaterial({ color: 0x355079, transparent: true, opacity: 0.6 });
-    const orbit = new THREE.LineLoop(orbitGeo, orbitMat);
-    solarGroup.add(orbit);
-    orbitLines.push(orbit);
+async function init() {
+  // Create core components
+  scene = createScene();
+  camera = createCamera();
+  renderer = createRenderer();
+  
+  // Create scene elements
+  const solarResult = createSolarSystem(scene);
+  solarGroup = solarResult.solarGroup;
+  orbitLines = solarResult.orbitLines;
+  planetsData = solarResult.planetsData;
+  planets = solarResult.planets;
+  labels = solarResult.labels;
+  selectables = solarResult.selectables;
+  solarMaxDist = Math.max(...planetsData.map(p => p.dist));
 
-    // Label
-    const label = makeLabel(p.name);
-    label.position.set(p.dist, p.radius * 2.2, 0);
-    solarGroup.add(label);
-    labels.push(label);
+  const galaxyResult = createGalaxy(scene);
+  galaxyGroup = galaxyResult.galaxyGroup;
+  galaxyPoints = galaxyResult.galaxyPoints;
+  sunMilky = galaxyResult.sunMilky;
+  sunMilkyLabel = galaxyResult.sunMilkyLabel;
+  centerLabel = galaxyResult.centerLabel;
+  accretionDisk = galaxyResult.accretionDisk;
+  bulge = galaxyResult.bulge;
+  armsPoints = galaxyResult.armsPoints;
+  bulgePoints = galaxyResult.bulgePoints;
+  haloPoints = galaxyResult.haloPoints;
+  coreGlowSprites = galaxyResult.coreGlowSprites || [];
+  spiralArms = galaxyResult.spiralArms || [];
+  starFormationRegions = galaxyResult.starFormationRegions || [];
+  dustLanes = galaxyResult.dustLanes;
 
-    // Saturn ring
-    if (p.hasRing) {
-      const ringGeo = new THREE.RingGeometry(p.radius * 1.3, p.radius * 2.2, 64);
-      const ringCanvas = document.createElement("canvas");
-      ringCanvas.width = 256; ringCanvas.height = 8;
-      const g = ringCanvas.getContext("2d");
-      const grad = g.createLinearGradient(0, 0, 256, 0);
-      grad.addColorStop(0, "rgba(255,255,255,0)");
-      grad.addColorStop(0.5, "rgba(255,255,255,.6)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad; g.fillRect(0, 0, 256, 8);
-      const ringTex = new THREE.CanvasTexture(ringCanvas);
-      ringTex.wrapS = ringTex.wrapT = THREE.RepeatWrapping; ringTex.repeat.set(8, 1);
-      const ringMat = new THREE.MeshBasicMaterial({ map: ringTex, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+  // Add lights
+  const { sunLight, ambient } = createLights();
+  scene.add(sunLight, ambient);
+
+  // Set up controls
+  controls = new BasicOrbitControls(camera, renderer.domElement);
+
+  // UI setup
+  uiElements = getUIElements();
+  setupEventHandlers();
+
+  // Initialize mode
+  setMode('solar');
+  // Apply any saved settings and possibly switch mode
+  applySettingsFromStorage();
+  setInfoFor("Sun");
+  
+  // Ensure camera animation is complete to prevent interference
+  camLerp = 1;
+  camFromPos.copy(camera.position);
+  camToPos.copy(camera.position);
+
+  // Start animation loop
+  animate();
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const dt = 1/60;
+  
+  if (playing) {
+    planets.forEach(p => {
+      if (p.userData) {
+        // Enhanced orbital speed calculation for better visual experience
+        // Apply a logarithmic speed boost to outer planets while maintaining relative relationships
+        const baseSpeed = timeSpeed / p.userData.periodDays;
+        const distanceFromSun = p.userData.dist;
+        
+        // Apply distance-based speed adjustment (inner planets: normal, outer planets: boosted)
+        const speedMultiplier = 1 + Math.log(Math.max(1, distanceFromSun / 15)) * 0.3;
+        const adjustedSpeed = baseSpeed * speedMultiplier;
+        
+        p.userData.theta += adjustedSpeed * 0.01;
+        p.position.x = Math.cos(p.userData.theta) * p.userData.dist;
+        p.position.z = Math.sin(p.userData.theta) * p.userData.dist;
+        
+        // Update label position
+        const labelIndex = planets.indexOf(p);
+        if (labels[labelIndex]) {
+          labels[labelIndex].position.set(p.position.x, p.geometry.parameters.radius * 2.2, p.position.z);
+        }
+      }
+    });
+    
+    if (galaxyAutoRotate && galaxyGroup) {
+      galaxyGroup.rotation.y += galaxyRotationSpeed * dt;
+    }
+  }
+  
+  if (camLerp < 1) {
+    camLerp = Math.min(1, camLerp + dt / CAM_TIME);
+    const t = 1 - Math.pow(1 - camLerp, 3);
+    camera.position.lerpVectors(camFromPos, camToPos, t);
+    _tmpVec3.lerpVectors(targetFrom, targetTo, t);
+    controls.target.copy(_tmpVec3);
+  }
+  
+  // Dynamic camera following when Lock camera is enabled
+  const fs = uiElements && uiElements.followSelection;
+  if (fs && fs.checked && focused !== "Sun" && mode === "solar") {
+    const mesh = findPlanetByName(focused);
+    if (mesh && camLerp >= 1) { // Only follow after initial focus animation is complete
+      // Calculate optimal camera distance based on planet size and distance from sun
+      const planetRadius = mesh.geometry.parameters.radius;
+      const optimalDistance = Math.max(8, planetRadius * 12 + mesh.userData.dist * 0.15);
+      
+      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(optimalDistance);
+      const idealCamPos = new THREE.Vector3().copy(mesh.position)
+        .add(new THREE.Vector3(0.6, 0.8, 0.6).multiplyScalar(optimalDistance * 0.3))
+        .add(back);
+      
+      // Smooth camera interpolation for better following experience
+      const lerpFactor = 0.02; // Smooth following
+      camera.position.lerp(idealCamPos, lerpFactor);
+      
+      // Smooth target interpolation
+      const currentTarget = new THREE.Vector3().copy(controls.target);
+      currentTarget.lerp(mesh.position, lerpFactor);
+      controls.target.copy(currentTarget);
+    }
+  }
+  
+  if (touring) {
+    tourTimer += dt;
+    if (tourTimer > 4) {
+      tourTimer = 0;
+      tourIndex = (tourIndex + 1) % uiElements.tourOrder.length;
+      focusOn(uiElements.tourOrder[tourIndex]);
+    }
+  }
+  // Galaxy auto tour
+  if (mode === 'galaxy' && galaxyTouring) {
+    galaxyTourTimer += dt;
+    if (galaxyTourTimer > 4) {
+      galaxyTourTimer = 0;
+      galaxyTourIdx = (galaxyTourIdx + 1) % galaxyTourSeq.length;
+      const dest = galaxyTourSeq[galaxyTourIdx];
+      const galaxyFocus = document.getElementById('galaxyFocus');
+      if (galaxyFocus) galaxyFocus.value = dest;
+      if (dest === 'core') { focusGalaxyCenter(); setGalaxyInfo('core'); }
+      if (dest === 'sun') { focusGalaxySun(); setGalaxyInfo('sun'); }
+      if (dest === 'wide') { resetGalaxyView(); setGalaxyInfo('wide'); }
+    }
+  }
+  
+  if (controls) controls.update();
+  updateAllLabelScales(camera, labelSizeMultiplier, labels, sunMilkyLabel, centerLabel, spiralArms);
+  renderer.render(scene, camera);
+}
+
+function findPlanetByName(name) {
+  return planets.find(p => p.userData && p.userData.name === name);
+}
+
+function focusOn(name) {
+  focused = name;
+  orbitLines.forEach((line, i) => {
+    const on = (planetsData[i].name === name);
+    line.material.opacity = on ? 0.95 : 0.25;
+    line.material.color.setHex(on ? 0xaad4ff : 0x355079);
+    line.material.needsUpdate = true;
+  });
+
+  const meta = planetsData.find(p => p.name === name);
+  setInfoFor(name, meta);
+
+  // Add a soft highlight halo around the focused planet
+  planets.forEach(p => {
+    const old = p.getObjectByName('focusHalo');
+    if (old) p.remove(old);
+  });
+  if (name !== 'Sun') {
+    const mesh = findPlanetByName(name);
+    if (mesh) {
+      const r = mesh.geometry?.parameters?.radius || 0.5;
+      const ringGeo = new THREE.RingGeometry(r * 1.35, r * 1.7, 48);
+      const c = document.createElement('canvas'); c.width = 128; c.height = 16;
+      const g = c.getContext('2d'); const grd = g.createLinearGradient(0,0,128,0);
+      grd.addColorStop(0,'rgba(120,180,255,0)'); grd.addColorStop(0.5,'rgba(120,180,255,0.7)'); grd.addColorStop(1,'rgba(120,180,255,0)');
+      g.fillStyle = grd; g.fillRect(0,0,128,16);
+      const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter; tex.premultiplyAlpha = true;
+      const ringMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite:false, opacity: 0.9, side: THREE.DoubleSide });
       const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = Math.PI / 2.4;
+      ring.name = 'focusHalo';
+      ring.rotation.x = Math.PI / 2;
       mesh.add(ring);
     }
-    selectables.push(mesh);
-  });
-
-  // ======================= MILKY WAY (stylized) =======================
-  const galaxyGroup = new THREE.Group();
-  galaxyGroup.visible = false;
-  scene.add(galaxyGroup);
-
-  const ARMS = 4, STARS = 14000, R_MAX = 160, THICK = 2.8;
-  let galaxyRotationSpeed = 0.005; // radians per second
-  let galaxyAutoRotate = true;
-  let starBrightness = 0.9; // 0..1 multiplier
-  let galaxyPoints = null;
-  (function makeGalaxy() {
-    const gPos = new Float32Array(STARS * 3);
-    const gCol = new Float32Array(STARS * 3);
-    for (let i = 0; i < STARS; i++) {
-      const arm = i % ARMS;
-      const armAngle = (arm / ARMS) * Math.PI * 2;
-      const t = Math.random() * 6.4 * Math.PI;
-      const radius = THREE.MathUtils.mapLinear(Math.pow(Math.random(), 0.6), 0, 1, 1.5, R_MAX);
-      const twist = t * 0.20;
-      const angle = armAngle + t + twist;
-      const spread = THREE.MathUtils.mapLinear(radius, 0, R_MAX, 1.0, 4.0);
-      const x = Math.cos(angle) * radius + THREE.MathUtils.randFloatSpread(spread);
-      const y = THREE.MathUtils.randFloatSpread(THICK);
-      const z = Math.sin(angle) * radius + THREE.MathUtils.randFloatSpread(spread);
-      gPos[i * 3 + 0] = x; gPos[i * 3 + 1] = y; gPos[i * 3 + 2] = z;
-
-      const coreMix = 1 - Math.min(radius / R_MAX, 1);
-      gCol[i * 3 + 0] = (0.95 * coreMix + 0.3 * (1 - coreMix));
-      gCol[i * 3 + 1] = (0.85 * coreMix + 0.5 * (1 - coreMix));
-      gCol[i * 3 + 2] = (0.70 * coreMix + 1.0 * (1 - coreMix));
-    }
-    const gGeo = new THREE.BufferGeometry();
-    gGeo.setAttribute("position", new THREE.BufferAttribute(gPos, 3));
-    gGeo.setAttribute("color", new THREE.BufferAttribute(gCol, 3));
-    const gMat = new THREE.PointsMaterial({ size: 0.9, vertexColors: true, transparent: true, opacity: starBrightness });
-    const galaxy = new THREE.Points(gGeo, gMat);
-    galaxyGroup.add(galaxy);
-    galaxyPoints = galaxy;
-  })();
-
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(6, 32, 32),
-    new THREE.MeshBasicMaterial({ color: 0xfff2c6 })
-  );
-  galaxyGroup.add(core);
-
-  // Add a soft glow around the galactic core (sprite-based halo)
-  (function addCoreGlow(){
-    const c = document.createElement('canvas');
-    c.width = 256; c.height = 256;
-    const g = c.getContext('2d');
-    const grad = g.createRadialGradient(128,128,10, 128,128,120);
-    grad.addColorStop(0, 'rgba(255,242,198,0.55)');
-    grad.addColorStop(0.6, 'rgba(255,220,160,0.22)');
-    grad.addColorStop(1, 'rgba(255,200,140,0)');
-    g.fillStyle = grad; g.beginPath(); g.arc(128,128,120,0,Math.PI*2); g.fill();
-    const tex = new THREE.CanvasTexture(c);
-    tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({ map: tex, depthWrite:false, transparent:true, opacity: 0.9, color: 0xffffff });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(50, 50, 1);
-    core.add(sprite);
-  })();
-
-  // Sun marker in the Orion Spur (stylized)
-  const sunMilky = new THREE.Mesh(
-    new THREE.SphereGeometry(2, 20, 20),
-    new THREE.MeshBasicMaterial({ color: 0x6bb6ff })
-  );
-  const sunGalRadius = 82 * (R_MAX / 160);
-  const sunGalAngle = Math.PI * 1.7;
-  sunMilky.position.set(Math.cos(sunGalAngle) * sunGalRadius, 0.6, Math.sin(sunGalAngle) * sunGalRadius);
-  galaxyGroup.add(sunMilky);
-
-  const sunMilkyLabel = makeLabel("Sun (Orion Spur)");
-  sunMilkyLabel.position.copy(sunMilky.position).add(new THREE.Vector3(4, 4, 0));
-  galaxyGroup.add(sunMilkyLabel);
-
-  const centerLabel = makeLabel("Galactic Center");
-  centerLabel.position.set(8, 6, 0);
-  galaxyGroup.add(centerLabel);
-
-  // Keep labels legible by scaling with camera distance
-  function updateAllLabelScales(){
-    const tmp = new THREE.Vector3();
-    const resize = (spr) => {
-      if (!spr || !spr.userData || !spr.userData.label) return;
-      spr.getWorldPosition(tmp);
-      const d = camera.position.distanceTo(tmp);
-      const factor = THREE.MathUtils.clamp((260 / d) * labelSizeMultiplier, 0.4, 8.0);
-      const { w, h, unit } = spr.userData.label;
-      spr.scale.set(w * unit * factor, h * unit * factor, 1);
-    };
-    for (let i = 0; i < labels.length; i++) resize(labels[i]);
-    resize(sunMilkyLabel);
-    resize(centerLabel);
   }
 
-  // Selection / focus handling
-  let focused = "Sun";
-  let camLerp = 0;
-  let camFromPos = new THREE.Vector3();
-  let camToPos = new THREE.Vector3();
-  let targetFrom = new THREE.Vector3();
-  let targetTo = new THREE.Vector3(0,0,0);
-  const CAM_TIME = 0.9; // seconds
+  camLerp = 0;
+  camFromPos.copy(camera.position);
+  targetFrom.copy(controls.target);
 
-  // ======================= UI =======================
-  const elSpeed = document.getElementById("speed") || null;
-  const elSpeedVal = document.getElementById("speedVal") || null;
-  const elShowOrbits = document.getElementById("showOrbits") || null;
-  const elShowLabels = document.getElementById("showLabels") || null;
-  const btnSolar = document.getElementById("btnSolar") || null;
-  const btnGalaxy = document.getElementById("btnGalaxy") || null;
-  const modePill = document.getElementById("modePill") || null;
-  const legendTitle = document.getElementById("legendTitle") || null;
-  const legendList = document.getElementById("legendList") || null;
-  const resetView = document.getElementById("resetView") || null;
+  if (name === "Sun") {
+    targetTo.set(0, 0, 0);
+    // Frame based on current system size
+    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+    camToPos.set(0, r * 1.25, r * 3.1);
+  } else {
+    const mesh = findPlanetByName(name);
+    if (mesh) {
+      targetTo.copy(mesh.position);
+      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(6 + mesh.geometry.parameters.radius * 8);
+      camToPos.copy(mesh.position).add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6)).add(back);
+    }
+  }
+}
 
-  const focusSelect = document.getElementById("focusSelect") || null;
-  const followSelection = document.getElementById("followSelection") || null;
-  const btnPlay = document.getElementById("btnPlay") || null;
-  const btnTour = document.getElementById("btnTour") || null;
+function setMode(next) {
+  mode = next;
+  const solar = mode === "solar";
+  
+  if (solarGroup) solarGroup.visible = solar;
+  if (galaxyGroup) galaxyGroup.visible = !solar;
+  
+  const modePill = document.getElementById("modePill");
+  const btnSolar = document.getElementById("btnSolar");
+  const btnGalaxy = document.getElementById("btnGalaxy");
+  const uiRoot = document.getElementById("ui");
+  
+  if (modePill) modePill.textContent = solar ? "Solar System" : "Milky Way";
+  if (btnSolar) btnSolar.classList.toggle("active", solar);
+  if (btnGalaxy) btnGalaxy.classList.toggle("active", !solar);
+  if (uiRoot) uiRoot.setAttribute('data-mode', solar ? 'solar' : 'galaxy');
 
-  // Galaxy controls
-  const uiRoot = document.getElementById("ui") || null;
-  const galaxyFocus = document.getElementById("galaxyFocus") || null;
-  const galaxyAutoRotateEl = document.getElementById("galaxyAutoRotate") || null;
-  const galaxySpin = document.getElementById("galaxySpin") || null;
-  const galaxySpinVal = document.getElementById("galaxySpinVal") || null;
-  const starBrightnessEl = document.getElementById("starBrightness") || null;
-  const starBrightnessVal = document.getElementById("starBrightnessVal") || null;
-  // Label size control
-  const labelScaleEl = document.getElementById("labelScale") || null;
-  const labelScaleVal = document.getElementById("labelScaleVal") || null;
-  let labelSizeMultiplier = labelScaleEl ? (parseInt(labelScaleEl.value, 10) / 100) : 1.6;
+  if (solar) {
+    camera.near = 0.1; camera.far = 3000; camera.updateProjectionMatrix();
+    // Allow closer zoom, and limit max to keep system readable
+    controls.minDistance = 2;
+    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+    controls.maxDistance = Math.max(160, r * 4.0);
+    resetSolarView();
+    updateLegend('solar');
+  } else {
+    camera.near = 0.1; camera.far = 8000; camera.updateProjectionMatrix();
+    controls.minDistance = 30; controls.maxDistance = 3000;
+    resetGalaxyView();
+    updateLegend('galaxy');
+    setGalaxyInfo('wide');
+    
+    // Reset galaxy focus dropdown to 'wide'
+    const galaxyFocus = document.getElementById('galaxyFocus');
+    if (galaxyFocus) galaxyFocus.value = 'wide';
+  }
+  saveSettings();
+}
 
-  // Safe defaults if some controls don't exist in the HTML
-  let timeSpeed = elSpeed ? parseInt(elSpeed.value, 10) : 40;
-  const showOrbitsDefault = elShowOrbits ? !!elShowOrbits.checked : true;
-  const showLabelsDefault = elShowLabels ? !!elShowLabels.checked : true;
+function resetSolarView() {
+  // Frame based on outermost orbit with comfortable padding
+  const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+  const y = r * 1.25;
+  const z = r * 3.1;
+  camera.position.set(0, y, z);
+  controls.target.set(0, 0, 0);
+  controls.update();
+  // Ensure no animation overrides this position
+  camLerp = 1;
+}
 
+function resetGalaxyView() {
+  camera.position.set(0, 120, 280);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function focusGalaxyCenter() {
+  camLerp = 0;
+  camFromPos.copy(camera.position);
+  targetFrom.copy(controls.target);
+  targetTo.set(0, 0, 0);
+  // Position camera to get a good view of the galactic core
+  camToPos.set(0, 45, 120);
+}
+
+function focusGalaxySun() {
+  camLerp = 0;
+  camFromPos.copy(camera.position);
+  targetFrom.copy(controls.target);
+  
+  if (sunMilky) {
+    // Focus directly on the Sun's position
+    targetTo.copy(sunMilky.position);
+    // Adaptive view distance based on Sun's galactic radius for consistent framing
+    const sunPos = sunMilky.position.clone();
+    const sunRadius = Math.sqrt(sunPos.x*sunPos.x + sunPos.z*sunPos.z) || 80;
+    const offsetDistance = THREE.MathUtils.clamp(sunRadius * 0.35, 20, 40);
+    const heightOffset = THREE.MathUtils.clamp(sunRadius * 0.16, 12, 22);
+    camToPos.set(sunPos.x + offsetDistance * 0.7, sunPos.y + heightOffset, sunPos.z + offsetDistance * 0.7);
+  } else {
+    focusGalaxyCenter();
+  }
+}
+
+function setupEventHandlers() {
+  const {
+    elSpeed, elSpeedVal, elShowOrbits, elShowLabels, btnSolar, btnGalaxy,
+    resetView, focusSelect, followSelection, btnPlay, btnTour, galaxyFocus, galaxyAutoRotateEl,
+    galaxySpin, galaxySpinVal, starBrightnessEl, starBrightnessVal,
+    labelScaleEl, labelScaleVal, tourOrder
+  } = uiElements;
+  
+  // Reset Zoom button (preserve current view direction; reset distance to a sensible value)
+  const resetZoomBtn = document.getElementById('resetZoom');
+  const resetZoomOnly = () => {
+    const target = controls ? controls.target.clone() : new THREE.Vector3();
+    const dir = camera.position.clone().sub(target);
+    if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+    dir.normalize();
+    let dist;
+    if (mode === 'solar') {
+      const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+      dist = Math.max(100, r * 3.2);
+    } else {
+      dist = 300; // about the default galaxy framing distance
+    }
+    camera.position.copy(target).add(dir.multiplyScalar(dist));
+    camLerp = 1; // avoid interpolation overriding this
+    controls && controls.update();
+  };
+  if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoomOnly);
+
+  // Keyboard shortcuts: Z = Reset Zoom, R = Reset View
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const t = e.target;
+    const isTyping = t && (
+      t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
+    );
+    if (isTyping) return;
+    const k = (e.key || '').toLowerCase();
+    if (k === ' ') {
+      e.preventDefault();
+      if (mode === 'galaxy') {
+        // Space toggles galaxy auto‑rotate in Galaxy mode
+        galaxyAutoRotate = !galaxyAutoRotate;
+        const sw = document.getElementById('galaxyAutoRotate');
+        const lb = document.getElementById('galaxyAutoRotateLabel');
+        if (sw) { sw.checked = galaxyAutoRotate; sw.focus({ preventScroll: true }); }
+        if (lb) {
+          lb.classList.toggle('active', galaxyAutoRotate);
+          lb.classList.add('kbd-flash');
+          setTimeout(() => lb.classList.remove('kbd-flash'), 360);
+        }
+        saveSettings();
+      } else {
+        // Space toggles play/pause in Solar mode
+        playing = !playing;
+        const btnPlayEl = document.getElementById('btnPlay');
+        if (btnPlayEl) btnPlayEl.textContent = playing ? '⏸ Pause' : '▶ Play';
+        saveSettings();
+      }
+    } else if (k === '?' || k === 'h') {
+      const o = document.getElementById('helpOverlay');
+      if (o) o.classList.toggle('active');
+    } else if (k === 'u') {
+      const ui = document.getElementById('ui');
+      const legend = document.getElementById('legend');
+      const info = document.getElementById('infoPanel');
+      ui && ui.classList.toggle('hidden');
+      legend && legend.classList.toggle('hidden');
+      info && info.classList.toggle('hidden');
+    } else if (k === 'z') {
+      e.preventDefault();
+      resetZoomOnly();
+    } else if (k === 'r') {
+      e.preventDefault();
+      if (mode === 'solar') {
+        resetSolarView();
+      } else {
+        resetGalaxyView();
+        const galaxyFocusSel = document.getElementById('galaxyFocus');
+        if (galaxyFocusSel) galaxyFocusSel.value = 'wide';
+        setGalaxyInfo('wide');
+      }
+    }
+  });
+
+  // Help button and close handling
+  const helpBtn = document.getElementById('btnHelp');
+  const helpOverlay = document.getElementById('helpOverlay');
+  const closeHelpBtn = document.getElementById('btnCloseHelp');
+  helpBtn && helpBtn.addEventListener('click', () => helpOverlay && helpOverlay.classList.add('active'));
+  closeHelpBtn && closeHelpBtn.addEventListener('click', () => helpOverlay && helpOverlay.classList.remove('active'));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && helpOverlay && helpOverlay.classList.contains('active')) {
+      helpOverlay.classList.remove('active');
+    }
+  });
+  
+  // Speed control
   if (elSpeed) {
     elSpeed.addEventListener("input", () => {
       timeSpeed = parseInt(elSpeed.value, 10) || 0;
       if (elSpeedVal) elSpeedVal.textContent = "× " + timeSpeed;
+      saveSettings();
     });
     if (elSpeedVal) elSpeedVal.textContent = "× " + timeSpeed;
   }
 
+  // Orbit visibility
   if (elShowOrbits) {
     elShowOrbits.addEventListener("change", () => {
       orbitLines.forEach((l) => (l.visible = elShowOrbits.checked));
+      const lab = document.getElementById('showOrbitsLabel');
+      if (lab) lab.classList.toggle('active', !!elShowOrbits.checked);
+      saveSettings();
     });
+    const lab = document.getElementById('showOrbitsLabel');
+    if (lab) lab.classList.toggle('active', !!elShowOrbits.checked);
   }
 
+  // Label visibility  
   if (elShowLabels) {
     elShowLabels.addEventListener("change", () => {
       const vis = !!elShowLabels.checked;
       labels.forEach((l) => (l.visible = vis));
       if (sunMilkyLabel) sunMilkyLabel.visible = vis;
       if (centerLabel) centerLabel.visible = vis;
+      const lab = document.getElementById('showLabelsLabel');
+      if (lab) lab.classList.toggle('active', vis);
+      saveSettings();
     });
+    const lab = document.getElementById('showLabelsLabel');
+    if (lab) lab.classList.toggle('active', !!elShowLabels.checked);
   }
 
+  // Mode buttons
   if (btnSolar) btnSolar.addEventListener("click", () => setMode("solar"));
   if (btnGalaxy) btnGalaxy.addEventListener("click", () => setMode("galaxy"));
+  
+  // Reset view
   if (resetView) {
-    resetView.addEventListener("click", () =>
+    resetView.addEventListener("click", () => 
       mode === "solar" ? resetSolarView() : resetGalaxyView()
     );
   }
+  // Galaxy-specific Reset View (always recenters in galaxy mode)
+  const resetGalaxyViewBtn = document.getElementById('resetGalaxyView');
+  if (resetGalaxyViewBtn) {
+    resetGalaxyViewBtn.addEventListener('click', () => {
+      resetGalaxyView();
+      const galaxyFocusSel = document.getElementById('galaxyFocus');
+      if (galaxyFocusSel) galaxyFocusSel.value = 'wide';
+      setGalaxyInfo('wide');
+    });
+  }
 
-  let playing = true;
+  // Reset All - Solar
+  const resetSolarAllBtn = document.getElementById('resetSolarAll');
+  if (resetSolarAllBtn) {
+    resetSolarAllBtn.addEventListener('click', () => {
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) { el.value = String(v); el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); } };
+      const setChk = (id, v) => { const el = document.getElementById(id); if (el) { el.checked = !!v; el.dispatchEvent(new Event('change')); } };
+      setVal('speed', 40);
+      setChk('showOrbits', true);
+      setChk('showLabels', true);
+      setVal('labelScale', 160);
+      setChk('followSelection', true);
+      if (document.getElementById('focusSelect')) document.getElementById('focusSelect').value = 'Sun';
+      focusOn('Sun');
+      resetSolarView();
+      saveSettings();
+    });
+  }
+
+  // Reset All - Galaxy
+  const resetGalaxyAllBtn = document.getElementById('resetGalaxyAll');
+  if (resetGalaxyAllBtn) {
+    resetGalaxyAllBtn.addEventListener('click', () => {
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) { el.value = String(v); el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); } };
+      const setChk = (id, v) => { const el = document.getElementById(id); if (el) { el.checked = !!v; el.dispatchEvent(new Event('change')); } };
+      setChk('galaxyAutoRotate', true);
+      setVal('galaxySpin', 5);
+      setVal('starBrightness', 90);
+      setVal('galaxyTilt', 15);
+      setVal('starSize', 100);
+      setVal('nebulaVisibility', 60);
+      setVal('dustLaneVisibility', 40);
+      setChk('showGalaxyArms', true);
+      setChk('showSunOrbit', true);
+      setVal('armsOpacity', 100);
+      setVal('bulgeOpacity', 85);
+      setVal('haloOpacity', 65);
+      setVal('coreGlow', 80);
+      setVal('fogDensity', 15);
+      const gf = document.getElementById('galaxyFocus'); if (gf) gf.value = 'wide';
+      resetGalaxyView(); setGalaxyInfo('wide');
+      saveSettings();
+    });
+  }
+
+  // Play/Pause
   if (btnPlay) {
     btnPlay.addEventListener("click", () => {
       playing = !playing;
       btnPlay.textContent = playing ? "⏸ Pause" : "▶ Play";
+      saveSettings();
     });
   }
+
+  // Focus selection
   if (focusSelect) {
     focusSelect.addEventListener("change", () => {
       focusOn(focusSelect.value);
+      saveSettings();
     });
   }
-  let tourTimer = 0, tourIndex = 0, touring = false;
-  const tourOrder = ["Mercury","Venus","Earth","Mars","Jupiter","Saturn","Uranus","Neptune"];
+  // Lock camera switch
+  const followSel = document.getElementById('followSelection');
+  if (followSel) {
+    const lab = document.getElementById('followSelectionLabel');
+    if (lab) lab.classList.toggle('active', !!followSel.checked);
+    followSel.addEventListener('change', () => {
+      const l = document.getElementById('followSelectionLabel');
+      if (l) l.classList.toggle('active', !!followSel.checked);
+      saveSettings();
+    });
+  }
+
+  // Auto tour
   if (btnTour) {
     btnTour.addEventListener("click", () => {
       touring = !touring;
       tourIndex = 0;
+      tourTimer = 0;
       btnTour.textContent = touring ? "Stop tour" : "Auto tour";
-      if (touring) focusOn(tourOrder[tourIndex]);
+      if (touring && tourOrder && tourOrder.length > 0) {
+        focusOn(tourOrder[tourIndex]);
+      }
+      saveSettings();
     });
   }
 
-  // Galaxy UI bindings
+  // Enhanced Galaxy controls
   if (galaxyFocus) {
     galaxyFocus.addEventListener('change', () => {
-      const v = galaxyFocus.value;
-      if (v === 'core') focusGalaxyCenter();
-      else if (v === 'sun') focusGalaxySun();
-      else resetGalaxyView();
+      const value = galaxyFocus.value;
+      if (value === 'core') {
+        focusGalaxyCenter();
+        setGalaxyInfo('core');
+      } else if (value === 'sun') {
+        focusGalaxySun();
+        setGalaxyInfo('sun');
+      } else if (value === 'wide') {
+        resetGalaxyView();
+        setGalaxyInfo('wide');
+      }
+      saveSettings();
     });
   }
-  if (galaxyAutoRotateEl) {
-    galaxyAutoRotateEl.addEventListener('change', () => {
-      galaxyAutoRotate = !!galaxyAutoRotateEl.checked;
+
+  // Galaxy auto-rotate switch
+  const autoSwitch = document.getElementById('galaxyAutoRotate');
+  const autoLabel = document.getElementById('galaxyAutoRotateLabel');
+  const syncAutoRotateUI = () => {
+    if (autoSwitch) autoSwitch.checked = !!galaxyAutoRotate;
+    if (autoLabel) autoLabel.classList.toggle('active', galaxyAutoRotate);
+  };
+  if (autoSwitch) {
+    autoSwitch.addEventListener('change', () => {
+      galaxyAutoRotate = !!autoSwitch.checked;
+      syncAutoRotateUI();
+      saveSettings();
     });
-    galaxyAutoRotate = !!galaxyAutoRotateEl.checked;
+    syncAutoRotateUI();
   }
+
+  // Galaxy spin speed
   if (galaxySpin) {
     const setSpinLabel = () => {
       if (galaxySpinVal) galaxySpinVal.textContent = `× ${(galaxyRotationSpeed / 0.01).toFixed(1)}`;
     };
+    
     galaxySpin.addEventListener('input', () => {
-      const v = parseInt(galaxySpin.value, 10); // 0..20
-      galaxyRotationSpeed = (v / 20) * 0.02; // 0..0.02
+      const v = parseInt(galaxySpin.value, 10); // -20..20
+      galaxyRotationSpeed = (v / 20) * 0.02; // -0.02..0.02
       setSpinLabel();
+      saveSettings();
     });
+    
     setSpinLabel();
   }
+
+  // Star brightness
   if (starBrightnessEl) {
     const applyBrightness = () => {
       const pct = parseInt(starBrightnessEl.value, 10); // 30..130
       starBrightness = THREE.MathUtils.clamp(pct / 100, 0.3, 1.3);
-      if (galaxyPoints && galaxyPoints.material) {
-        galaxyPoints.material.opacity = Math.min(1.0, starBrightness);
-        galaxyPoints.material.needsUpdate = true;
-      }
+      [armsPoints, bulgePoints, haloPoints].forEach(ps => {
+        if (ps && ps.material) {
+          ps.material.opacity = Math.min(1.0, starBrightness);
+          ps.material.needsUpdate = true;
+        }
+      });
       if (starBrightnessVal) starBrightnessVal.textContent = `${parseInt(starBrightnessEl.value, 10)}%`;
     };
+    
     starBrightnessEl.addEventListener('input', applyBrightness);
     applyBrightness();
+    starBrightnessEl.addEventListener('change', saveSettings);
   }
+  
+  // New enhanced galaxy controls
+  const nebulaVisibilityEl = document.getElementById('nebulaVisibility');
+  const nebulaVisibilityVal = document.getElementById('nebulaVisibilityVal');
+  const dustLaneVisibilityEl = document.getElementById('dustLaneVisibility');
+  const dustLaneVisibilityVal = document.getElementById('dustLaneVisibilityVal');
+  const showGalaxyArmsEl = document.getElementById('showGalaxyArms');
+  const showSunOrbitEl = document.getElementById('showSunOrbit');
+  const galaxyTiltEl = document.getElementById('galaxyTilt');
+  const galaxyTiltVal = document.getElementById('galaxyTiltVal');
+  const starSizeEl = document.getElementById('starSize');
+  const starSizeVal = document.getElementById('starSizeVal');
+  let baseStarSize = null;
+  
+  // Nebula visibility
+  if (nebulaVisibilityEl) {
+    const applyNebulaVisibility = () => {
+      const pct = parseInt(nebulaVisibilityEl.value, 10);
+      const opacity = pct / 100;
+      if (starFormationRegions) {
+        starFormationRegions.forEach(nebula => {
+          if (nebula.material) {
+            nebula.material.opacity = opacity * 0.6; // Base opacity * control
+            nebula.material.needsUpdate = true;
+          }
+        });
+      }
+      if (nebulaVisibilityVal) nebulaVisibilityVal.textContent = `${pct}%`;
+    };
+    
+    nebulaVisibilityEl.addEventListener('input', applyNebulaVisibility);
+    applyNebulaVisibility();
+    nebulaVisibilityEl.addEventListener('change', saveSettings);
+  }
+  
+  // Dust lane visibility
+  if (dustLaneVisibilityEl) {
+    const applyDustVisibility = () => {
+      const pct = parseInt(dustLaneVisibilityEl.value, 10);
+      const opacity = pct / 100;
+      if (dustLanes && dustLanes.material) {
+        dustLanes.material.opacity = opacity * 0.4; // Base opacity * control
+        dustLanes.material.needsUpdate = true;
+      }
+      if (dustLaneVisibilityVal) dustLaneVisibilityVal.textContent = `${pct}%`;
+    };
+    
+    dustLaneVisibilityEl.addEventListener('input', applyDustVisibility);
+    applyDustVisibility();
+    dustLaneVisibilityEl.addEventListener('change', saveSettings);
+  }
+  
+  // Show galaxy arm labels
+  if (showGalaxyArmsEl) {
+    showGalaxyArmsEl.addEventListener('change', () => {
+      const visible = showGalaxyArmsEl.checked;
+      if (spiralArms) {
+        spiralArms.forEach(label => {
+          label.visible = visible;
+        });
+      }
+      const lab = document.getElementById('showGalaxyArmsLabel');
+      if (lab) lab.classList.toggle('active', visible);
+      saveSettings();
+    });
+    const lab = document.getElementById('showGalaxyArmsLabel');
+    if (lab) lab.classList.toggle('active', !!showGalaxyArmsEl.checked);
+    // Apply initial visibility state
+    if (spiralArms && spiralArms.length) {
+      const vis0 = !!showGalaxyArmsEl.checked;
+      spiralArms.forEach(s => s.visible = vis0);
+    }
+  }
+  
+  // Show Sun orbit
+  if (showSunOrbitEl) {
+    showSunOrbitEl.addEventListener('change', () => {
+      const visible = showSunOrbitEl.checked;
+      // Find and toggle Sun orbit visibility
+      if (galaxyGroup) {
+        galaxyGroup.children.forEach(child => {
+          if (child.geometry && child.geometry.type === 'RingGeometry' && 
+              child.material && child.material.color.getHex() === 0x4488ff) {
+            child.visible = visible;
+          }
+        });
+      }
+      const lab = document.getElementById('showSunOrbitLabel');
+      if (lab) lab.classList.toggle('active', visible);
+      saveSettings();
+    });
+    const lab = document.getElementById('showSunOrbitLabel');
+    if (lab) lab.classList.toggle('active', !!showSunOrbitEl.checked);
+  }
+
+  // Galaxy tilt
+  if (galaxyTiltEl) {
+    const applyTilt = () => {
+      const deg = parseInt(galaxyTiltEl.value, 10) || 0;
+      const rad = THREE.MathUtils.degToRad(deg);
+      if (galaxyGroup) galaxyGroup.rotation.x = rad;
+      if (galaxyTiltVal) galaxyTiltVal.textContent = `${deg}°`;
+    };
+    galaxyTiltEl.addEventListener('input', applyTilt);
+    applyTilt();
+    galaxyTiltEl.addEventListener('change', saveSettings);
+  }
+
+  // Star size
+  if (starSizeEl) {
+    const applyStarSize = () => {
+      const pct = parseInt(starSizeEl.value, 10) || 100;
+      [armsPoints, bulgePoints, haloPoints].forEach(ps => {
+        if (!ps || !ps.material) return;
+        if (baseStarSize == null) baseStarSize = ps.material.size || 1.2;
+        ps.material.size = baseStarSize * (pct / 100);
+        ps.material.needsUpdate = true;
+      });
+      if (starSizeVal) starSizeVal.textContent = `${pct}%`;
+    };
+    starSizeEl.addEventListener('input', applyStarSize);
+    applyStarSize();
+    starSizeEl.addEventListener('change', saveSettings);
+  }
+
+  // Component opacities
+  const applyComp = (el, valEl, points, defPct) => {
+    if (!el || !points || !points.material) return;
+    const apply = () => {
+      const pct = parseInt(el.value, 10);
+      points.material.opacity = THREE.MathUtils.clamp((pct / 100) * starBrightness, 0, 1);
+      points.material.needsUpdate = true;
+      if (valEl) valEl.textContent = `${pct}%`;
+    };
+    el.addEventListener('input', apply);
+    el.value = String(defPct);
+    apply();
+  };
+  const armsOpacityEl = document.getElementById('armsOpacity');
+  const armsOpacityVal = document.getElementById('armsOpacityVal');
+  const bulgeOpacityEl = document.getElementById('bulgeOpacity');
+  const bulgeOpacityVal = document.getElementById('bulgeOpacityVal');
+  const haloOpacityEl = document.getElementById('haloOpacity');
+  const haloOpacityVal = document.getElementById('haloOpacityVal');
+  applyComp(armsOpacityEl, armsOpacityVal, armsPoints, 100);
+  applyComp(bulgeOpacityEl, bulgeOpacityVal, bulgePoints, 85);
+  applyComp(haloOpacityEl, haloOpacityVal, haloPoints, 65);
+  [armsOpacityEl, bulgeOpacityEl, haloOpacityEl].forEach(el => el && el.addEventListener('change', saveSettings));
+
+  // Core glow intensity
+  const coreGlowEl = document.getElementById('coreGlow');
+  const coreGlowVal = document.getElementById('coreGlowVal');
+  if (coreGlowEl) {
+    const baseOpacities = coreGlowSprites.map(s => s.material.opacity);
+    const apply = () => {
+      const pct = parseInt(coreGlowEl.value, 10);
+      coreGlowSprites.forEach((s, i) => {
+        s.material.opacity = baseOpacities[i] * (pct / 100);
+        s.material.needsUpdate = true;
+      });
+      if (coreGlowVal) coreGlowVal.textContent = `${pct}%`;
+    };
+    coreGlowEl.addEventListener('input', apply);
+    apply();
+    coreGlowEl.addEventListener('change', saveSettings);
+  }
+
+  // Fog density (scene haze)
+  const fogDensityEl = document.getElementById('fogDensity');
+  const fogDensityVal = document.getElementById('fogDensityVal');
+  if (fogDensityEl) {
+    const base = 0.0015;
+    const apply = () => {
+      const pct = parseInt(fogDensityEl.value, 10);
+      const density = base * (pct / 15); // 0..~0.01
+      if (scene && scene.fog) scene.fog.density = density;
+      if (fogDensityVal) fogDensityVal.textContent = `${pct}%`;
+    };
+    fogDensityEl.addEventListener('input', apply);
+    apply();
+    fogDensityEl.addEventListener('change', saveSettings);
+  }
+
+  // Galaxy auto tour
+  const btnGalaxyTour = document.getElementById('btnGalaxyTour');
+  if (btnGalaxyTour) {
+    btnGalaxyTour.addEventListener('click', () => {
+      galaxyTouring = !galaxyTouring;
+      galaxyTourTimer = 0;
+      galaxyTourIdx = 0;
+      btnGalaxyTour.textContent = galaxyTouring ? 'Stop tour' : 'Auto tour (Galaxy)';
+      if (galaxyTouring) {
+        const dest = galaxyTourSeq[galaxyTourIdx];
+        const galaxyFocus = document.getElementById('galaxyFocus');
+        if (galaxyFocus) galaxyFocus.value = dest;
+        if (dest === 'core') { focusGalaxyCenter(); setGalaxyInfo('core'); }
+        if (dest === 'sun') { focusGalaxySun(); setGalaxyInfo('sun'); }
+        if (dest === 'wide') { resetGalaxyView(); setGalaxyInfo('wide'); }
+      }
+      saveSettings();
+    });
+  }
+
+  // Label scale
   if (labelScaleEl) {
     const applyLabelScale = () => {
       const pct = parseInt(labelScaleEl.value, 10);
       labelSizeMultiplier = THREE.MathUtils.clamp(pct / 100, 0.5, 3.0);
       if (labelScaleVal) labelScaleVal.textContent = `${pct}%`;
     };
+    
     labelScaleEl.addEventListener('input', () => {
       applyLabelScale();
-      updateAllLabelScales();
     });
+    
     applyLabelScale();
   }
 
-  // Info panel updater
-  const infoPanel = document.getElementById("infoPanel");
-  const infoTitle = document.getElementById("infoTitle");
-  function setInfoFor(name, meta) {
-    if (!infoPanel) return;
-    infoTitle.textContent = name;
-    const body = infoPanel.querySelector(".info-body");
-    if (name === "Sun" || !meta) {
-      body.innerHTML = `
-        <div><b>Type:</b> G‑type main-sequence star</div>
-        <div><b>Distance from Sun:</b> —</div>
-        <div><b>Orbital period:</b> —</div>
-        <div class="hint">Tip: click a planet or use the Focus dropdown</div>
-      `;
-    } else {
-      body.innerHTML = `
-        <div><b>Distance from Sun:</b> ${meta.au} AU (stylized distance in scene)</div>
-        <div><b>Orbital period:</b> ~${meta.periodDays.toLocaleString()} days</div>
-        <div>${meta.desc}</div>
-      `;
+  // Mouse interaction
+  const pointerDownHandler = (evt) => {
+    try {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((evt.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      
+      const hits = raycaster.intersectObjects(selectables, false);
+      
+      if (hits.length > 0) {
+        const mesh = hits[0].object;
+        if (mesh && mesh.userData && typeof mesh.userData.name === 'string') {
+          const name = mesh.userData.name;
+          if (focusSelect) {
+            const optionExists = Array.from(focusSelect.options).some(
+              option => option.value === name
+            );
+            if (optionExists) {
+              focusSelect.value = name;
+            }
+          }
+          focusOn(name);
+        }
+      }
+
+      // Galaxy interactions: click Sun marker or Core
+      if (mode === 'galaxy') {
+        const galaxyTargets = [sunMilky, accretionDisk, bulge].filter(Boolean);
+        if (galaxyTargets.length) {
+          const ghits = raycaster.intersectObjects(galaxyTargets, false);
+          if (ghits.length > 0) {
+            const obj = ghits[0].object;
+            if (obj === sunMilky) {
+              if (galaxyFocus) galaxyFocus.value = 'sun';
+              focusGalaxySun();
+              setGalaxyInfo('sun');
+            } else {
+              if (galaxyFocus) galaxyFocus.value = 'core';
+              focusGalaxyCenter();
+              setGalaxyInfo('core');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in pointer down handler:', error);
     }
+  };
+  
+  if (renderer && renderer.domElement) {
+    renderer.domElement.addEventListener("pointerdown", pointerDownHandler);
   }
-  setInfoFor("Sun");
 
-  function findPlanetByName(name){
-    return planets.find(m => m.userData && m.userData.name === name) || null;
-  }
-
-  function focusOn(name){
-    focused = name;
-    // highlight orbit
-    orbitLines.forEach((line, i) => {
-      const on = (planetsData[i].name === name);
-      line.material.opacity = on ? 0.95 : 0.25;
-      line.material.color.setHex(on ? 0xaad4ff : 0x355079);
-      line.material.needsUpdate = true;
+  // Screenshot
+  const btnScreenshot = document.getElementById('btnScreenshot');
+  if (btnScreenshot) {
+    btnScreenshot.addEventListener('click', () => {
+      try {
+        const data = renderer.domElement.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = data;
+        const modeLabel = mode === 'galaxy' ? 'galaxy' : 'solar';
+        a.download = `space-viz-${modeLabel}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        console.error('Screenshot failed:', e);
+      }
     });
-
-    const meta = planetsData.find(p => p.name === name);
-    setInfoFor(name, meta);
-
-    camLerp = 0;
-    camFromPos.copy(camera.position);
-    targetFrom.copy(controls.target);
-
-    if (name === "Sun") {
-      targetTo.set(0,0,0);
-      // distance based on framing radius
-      const radius = (SOLAR_MAX_DIST + 4) * 1.08;
-      const vFOV = THREE.MathUtils.degToRad(camera.fov);
-      const aspect = renderer.domElement.clientWidth / renderer.domElement.clientHeight;
-      const distV = radius / Math.tan(vFOV / 2);
-      const hFOV = 2 * Math.atan(Math.tan(vFOV / 2) * aspect);
-      const distH = radius / Math.tan(hFOV / 2);
-      const dist = Math.max(distV, distH);
-      camToPos.set(0, radius * 0.55, dist);
-    } else {
-      const mesh = findPlanetByName(name);
-      if (mesh) {
-        // position camera offset from planet, looking at it
-        targetTo.copy(mesh.position);
-        const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(6 + mesh.geometry.parameters.radius * 8);
-        camToPos.copy(mesh.position).add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6)).add(back);
-      }
-    }
   }
 
-  // Galaxy focus helpers
-  function focusGalaxyCenter(){
-    camLerp = 0; camFromPos.copy(camera.position); targetFrom.copy(controls.target);
-    targetTo.set(0,0,0);
-    camToPos.set(0, 60, 160);
-  }
-  function focusGalaxySun(){
-    camLerp = 0; camFromPos.copy(camera.position); targetFrom.copy(controls.target);
-    if (sunMilky) {
-      targetTo.copy(sunMilky.position);
-      camToPos.copy(sunMilky.position).add(new THREE.Vector3(0, 24, 60));
-    } else {
-      focusGalaxyCenter();
-    }
-  }
-
-  // Pointer picking
-  function onPointerDown(evt){
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((evt.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(selectables, false);
-    if (hits.length) {
-      const mesh = hits[0].object;
-      const name = mesh.userData && mesh.userData.name;
-      if (name) {
-        if (focusSelect) focusSelect.value = name;
-        focusOn(name);
-      }
-    }
-  }
-  renderer.domElement.addEventListener("pointerdown", onPointerDown);
-
-  // ======================= ANIMATION =======================
-  let last = performance.now();
-  function animate(now) {
-    const dt = Math.min((now - last) / 1000, 0.05);
-    last = now;
-
-    sun.rotation.y += dt * 0.15;
-
-    // Advance orbits (respect play/pause)
-    if (playing) {
-      const day = dt * timeSpeed;
-      for (let i = 0; i < planets.length; i++) {
-        const m = planets[i];
-        m.userData.theta += ((2 * Math.PI) / m.userData.periodDays) * day;
-        const x = Math.cos(m.userData.theta) * m.userData.dist;
-        const z = Math.sin(m.userData.theta) * m.userData.dist;
-        m.position.set(x, 0, z);
-        const lbl = labels[i];
-        lbl.position.set(x, m.geometry.parameters.radius * 2.2, z);
-      }
-    }
-
-    if (touring) {
-      tourTimer += dt;
-      if (tourTimer > 3.5) {
-        tourTimer = 0;
-        tourIndex = (tourIndex + 1) % tourOrder.length;
-        const name = tourOrder[tourIndex];
-        if (focusSelect) focusSelect.value = name;
-        focusOn(name);
-      }
-    }
-
-    if (galaxyGroup.visible) {
-      if (galaxyAutoRotate) galaxyGroup.rotation.y += dt * galaxyRotationSpeed;
-    }
-
-    // Camera tween towards target
-    if (camLerp < CAM_TIME) {
-      camLerp = Math.min(CAM_TIME, camLerp + dt);
-      const t = camLerp / CAM_TIME;
-      camera.position.lerpVectors(camFromPos, camToPos, t);
-      if (!followSelection || (followSelection && followSelection.checked)) {
-        controls.target.lerpVectors(targetFrom, targetTo, t);
-      }
-    }
-
-    updateAllLabelScales();
-
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  }
-  requestAnimationFrame(animate);
-
-  // Resize handling
+  // Resize handler
   window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  // Start in Solar mode
-  let mode = "solar";
-  function setMode(next) {
-    mode = next;
-    const solar = mode === "solar";
-    solarGroup.visible = solar;
-    galaxyGroup.visible = !solar;
-    if (modePill) modePill.textContent = solar ? "Solar System" : "Milky Way";
-    if (btnSolar) btnSolar.classList.toggle("active", solar);
-    if (btnGalaxy) btnGalaxy.classList.toggle("active", !solar);
-    if (uiRoot) uiRoot.setAttribute('data-mode', solar ? 'solar' : 'galaxy');
-
-    if (solar) {
-      camera.near = 0.1; camera.far = 5000; camera.updateProjectionMatrix();
-      controls.minDistance = 5; controls.maxDistance = 800;
-      if (legendTitle) legendTitle.textContent = "Solar System quick facts";
-      if (legendList) legendList.innerHTML = `
-        <li>Sizes & distances are <b>not to scale</b>.</li>
-        <li>Earth ~365 days; Neptune ~165 years.</li>
-        <li>Saturn ring stylized; orbits as guides.</li>`;
-      // Refresh info panel for Solar mode
-      if (infoPanel) {
-        const body = infoPanel.querySelector('.info-body');
-        if (infoTitle) infoTitle.textContent = 'Sun';
-        if (body) body.innerHTML = `
-          <div><b>Type:</b> G‑type main-sequence star</div>
-          <div><b>Distance from Sun:</b> —</div>
-          <div><b>Orbital period:</b> —</div>
-          <div class="hint">Tip: click a planet or use the Focus dropdown</div>
-        `;
-      }
-      resetSolarView();
-    } else {
-      camera.near = 0.1; camera.far = 8000; camera.updateProjectionMatrix();
-      controls.minDistance = 30; controls.maxDistance = 3000;
-      if (legendTitle) legendTitle.textContent = "Milky Way quick facts (stylized)";
-      if (legendList) legendList.innerHTML = `
-        <li>Spiral arms approximated with a point cloud.</li>
-        <li>Sun is in the <b>Orion Spur</b>, ~27,000 ly from center.</li>
-        <li>Disk ~100,000 ly across; thin but wide.</li>`;
-      // Refresh info panel for Galaxy mode
-      if (infoPanel) {
-        const body = infoPanel.querySelector('.info-body');
-        if (infoTitle) infoTitle.textContent = 'Milky Way';
-        if (body) body.innerHTML = `
-          <div><b>Structure:</b> Barred spiral with multiple arms</div>
-          <div><b>Our location:</b> Orion Spur, ~27,000 ly from center</div>
-          <div><b>Disk size:</b> ~100,000 light‑years across</div>
-          <div class="hint">Use Focus to jump to the Core, the Sun’s neighborhood, or a wide view. Adjust spin/brightness above.</div>
-        `;
-      }
-      resetGalaxyView();
-      if (galaxyFocus) galaxyFocus.value = 'wide';
+    if (camera) {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
     }
-  }
+    if (renderer) {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  });
+}
 
-  // Compute a camera position that frames the whole solar system orbits nicely
-  function frameSolarSystem(padding = 1.08) {
-    const radius = (SOLAR_MAX_DIST + 4) * padding; // margin for labels/rings
-    const vFOV = THREE.MathUtils.degToRad(camera.fov);
-    const aspect = renderer.domElement.clientWidth / renderer.domElement.clientHeight;
-
-    const distV = radius / Math.tan(vFOV / 2);
-    const hFOV = 2 * Math.atan(Math.tan(vFOV / 2) * aspect);
-    const distH = radius / Math.tan(hFOV / 2);
-    const dist = Math.max(distV, distH);
-
-    camera.position.set(0, radius * 0.55, dist);
-    controls.target.set(0, 0, 0);
-    controls.update();
-  }
-
-  function resetSolarView(){
-    frameSolarSystem();
-  }
-  function resetGalaxyView() {
-    camera.position.set(0, 120, 280);
-    controls.target.set(0, 0, 0);
-    controls.update();
-  }
-
-  // Init UI visibility states
-  orbitLines.forEach((l) => (l.visible = showOrbitsDefault));
-  labels.forEach((l) => (l.visible = showLabelsDefault));
-  if (typeof sunMilkyLabel !== "undefined" && sunMilkyLabel) sunMilkyLabel.visible = showLabelsDefault;
-  if (typeof centerLabel !== "undefined" && centerLabel) centerLabel.visible = showLabelsDefault;
-
-  setMode("solar");
-  focusOn("Sun");
-})();
+init();

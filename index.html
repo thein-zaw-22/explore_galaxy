@@ -16,10 +16,12 @@
     <div class="row mode-toggle">
       <button id="btnSolar" class="active">Solar System</button>
       <button id="btnGalaxy">Milky Way</button>
+      <span class="spacer"></span>
+      <button id="btnHelp" title="Show keyboard shortcuts and tips">Help</button>
     </div>
 
       <div class="row mode-solar">
-        <button id="btnPlay" class="primary">⏸ Pause</button>
+        <button id="btnPlay" class="primary play-button">⏸ Pause</button>
         <button id="btnTour">Auto tour</button>
       </div>
 
@@ -36,7 +38,17 @@
           <option value="Uranus">Uranus</option>
           <option value="Neptune">Neptune</option>
         </select>
-        <label><input type="checkbox" id="followSelection" checked /> Lock camera</label>
+      </div>
+
+      <!-- Lock camera switch on its own row for clarity -->
+      <div class="row mode-solar">
+        <div class="switch">
+          <input type="checkbox" id="followSelection" checked aria-label="Lock camera" />
+          <label id="followSelectionLabel" for="followSelection">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Lock camera</span>
+          </label>
+        </div>
       </div>
 
     <div class="row mode-solar">
@@ -46,11 +58,23 @@
     </div>
 
     <div class="row mode-solar">
-      <label><input type="checkbox" id="showOrbits" checked /> Show orbits</label>
+      <div class="switch">
+        <input type="checkbox" id="showOrbits" checked aria-label="Show orbits" />
+        <label id="showOrbitsLabel" for="showOrbits">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Show orbits</span>
+        </label>
+      </div>
     </div>
 
     <div class="row">
-      <label><input type="checkbox" id="showLabels" checked /> Show labels</label>
+      <div class="switch">
+        <input type="checkbox" id="showLabels" checked aria-label="Show labels" />
+        <label id="showLabelsLabel" for="showLabels">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Show labels</span>
+        </label>
+      </div>
     </div>
 
     <!-- New: Label size slider (applies to both modes) -->
@@ -60,26 +84,48 @@
       <span class="pill" id="labelScaleVal">160%</span>
     </div>
 
-    <div class="row mode-solar">
-      <button id="resetView">Reset View</button>
+    <!-- Global: Reset Zoom button -->
+    <div class="row">
+      <button id="resetZoom" title="Reset only zoom distance; keep current direction">Reset Zoom</button>
     </div>
 
-    <!-- Galaxy-specific controls -->
+    <div class="row mode-solar">
+      <button id="resetView" title="Recenter the Solar System view">Reset View</button>
+      <span class="spacer"></span>
+      <button id="resetSolarAll" title="Restore Solar defaults (speed, labels, etc.)">Reset All</button>
+    </div>
+
+    <!-- Enhanced Galaxy-specific controls -->
     <div class="row mode-galaxy">
       <label for="galaxyFocus">Focus</label>
       <select id="galaxyFocus">
         <option value="core">Galactic Center</option>
-        <option value="sun">Sun (Orion Spur)</option>
+        <option value="sun">Sol System (Orion Arm)</option>
         <option value="wide">Wide View</option>
       </select>
-      <span class="spacer"></span>
-      <label><input type="checkbox" id="galaxyAutoRotate" checked /> Auto‑rotate</label>
+    </div>
+
+    <!-- Place Auto‑rotate switch on its own row to avoid truncation -->
+    <div class="row mode-galaxy">
+      <div class="switch" title="Toggle galaxy auto‑rotation">
+        <input type="checkbox" id="galaxyAutoRotate" checked aria-label="Auto‑rotate" />
+        <label id="galaxyAutoRotateLabel" for="galaxyAutoRotate">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Auto‑rotate</span>
+        </label>
+      </div>
     </div>
 
     <div class="row mode-galaxy">
       <label for="galaxySpin">Spin speed</label>
-      <input type="range" id="galaxySpin" min="0" max="20" value="5" />
+      <input type="range" id="galaxySpin" min="-20" max="20" value="5" />
       <span class="pill" id="galaxySpinVal">× 0.5</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="galaxyTilt">Tilt</label>
+      <input type="range" id="galaxyTilt" min="0" max="60" value="15" />
+      <span class="pill" id="galaxyTiltVal">15°</span>
     </div>
 
     <div class="row mode-galaxy">
@@ -87,8 +133,85 @@
       <input type="range" id="starBrightness" min="30" max="130" value="90" />
       <span class="pill" id="starBrightnessVal">90%</span>
     </div>
+    
+    <div class="row mode-galaxy">
+      <label for="starSize">Star size</label>
+      <input type="range" id="starSize" min="50" max="200" value="100" />
+      <span class="pill" id="starSizeVal">100%</span>
+    </div>
+    
+    <div class="row mode-galaxy">
+      <label for="nebulaVisibility">Nebulae visibility</label>
+      <input type="range" id="nebulaVisibility" min="0" max="100" value="60" />
+      <span class="pill" id="nebulaVisibilityVal">60%</span>
+    </div>
+    
+    <div class="row mode-galaxy">
+      <label for="dustLaneVisibility">Dust lanes</label>
+      <input type="range" id="dustLaneVisibility" min="0" max="100" value="40" />
+      <span class="pill" id="dustLaneVisibilityVal">40%</span>
+    </div>
+    
+    <div class="row mode-galaxy">
+      <div class="switch">
+        <input type="checkbox" id="showGalaxyArms" checked aria-label="Show arm labels" />
+        <label id="showGalaxyArmsLabel" for="showGalaxyArms">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Show arm labels</span>
+        </label>
+      </div>
+      <div class="switch">
+        <input type="checkbox" id="showSunOrbit" checked aria-label="Show Sun orbit" />
+        <label id="showSunOrbitLabel" for="showSunOrbit">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Show Sun orbit</span>
+        </label>
+      </div>
+    </div>
 
-    <div class="small">Drag to rotate · Wheel/pinch to zoom · Right-drag to pan</div>
+    <div class="row mode-galaxy">
+      <label for="armsOpacity">Arms</label>
+      <input type="range" id="armsOpacity" min="0" max="100" value="100" />
+      <span class="pill" id="armsOpacityVal">100%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="bulgeOpacity">Bulge</label>
+      <input type="range" id="bulgeOpacity" min="0" max="100" value="85" />
+      <span class="pill" id="bulgeOpacityVal">85%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="haloOpacity">Halo</label>
+      <input type="range" id="haloOpacity" min="0" max="100" value="65" />
+      <span class="pill" id="haloOpacityVal">65%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="coreGlow">Core glow</label>
+      <input type="range" id="coreGlow" min="0" max="100" value="80" />
+      <span class="pill" id="coreGlowVal">80%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="fogDensity">Haze</label>
+      <input type="range" id="fogDensity" min="0" max="100" value="15" />
+      <span class="pill" id="fogDensityVal">15%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <button id="resetGalaxyView" title="Recenter the galaxy view (keeps tilt)">Reset View</button>
+      <span class="spacer"></span>
+      <button id="resetGalaxyAll" title="Restore Galaxy defaults (spin, tilt, brightness, etc.)">Reset All</button>
+    </div>
+
+    <div class="row mode-galaxy">
+      <button id="btnGalaxyTour">Auto tour (Galaxy)</button>
+      <span class="spacer"></span>
+      <button id="btnScreenshot">Screenshot</button>
+    </div>
+
+    <div class="small">Drag to rotate · Wheel/pinch to zoom · Right-drag to pan · Space: Play/Pause (Solar) or Auto‑rotate (Galaxy) · Z: Reset Zoom · R: Reset View · U: Hide UI · ?: Help</div>
   </div>
 
   <aside class="legend" id="legend">
@@ -102,6 +225,25 @@
 
   <div class="footer">Built with Three.js · Educational scale model</div>
 
+  <!-- Help overlay -->
+  <div class="help-overlay" id="helpOverlay" aria-hidden="true">
+    <div class="help-card" role="dialog" aria-labelledby="helpTitle">
+      <h2 id="helpTitle">Shortcuts & Tips</h2>
+      <ul>
+        <li><b>Rotate</b>: drag left; <b>Pan</b>: right‑drag or Ctrl/Cmd + drag; <b>Zoom</b>: wheel/pinch.</li>
+        <li><b>Space</b>: Play/Pause (Solar) or Toggle Auto‑rotate (Galaxy).</li>
+        <li><b>Z</b>: Reset Zoom (keep direction) · <b>R</b>: Reset View (recenter).</li>
+        <li><b>U</b>: Hide/Show UI for a clean view · <b>?</b>/<b>H</b>: Toggle this help.</li>
+        <li>Solar: use <b>Focus</b> dropdown or click a planet. <b>Lock camera</b> to follow motion.</li>
+        <li>Galaxy: click the <b>Core</b> glow or <b>Sol marker</b> to focus. Use spin/tilt/brightness for clarity.</li>
+        <li>Try <b>Screenshot</b> in Galaxy for a quick export.</li>
+      </ul>
+      <div class="help-actions">
+        <button id="btnCloseHelp">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
     <aside class="info" id="infoPanel">
       <div class="info-title" id="infoTitle">Sun</div>
       <div class="info-body">
@@ -112,40 +254,10 @@
       </div>
     </aside>
 
-  <!-- Bootstrap loader to ensure dependencies load before app.js -->
-  <script>
-  (function(){
-    function load(src){
-      return new Promise(function(resolve, reject){
-        var s = document.createElement('script');
-        s.src = src; s.async = false;
-        s.onload = function(){ resolve(); };
-        s.onerror = function(){ reject(new Error('Failed to load ' + src)); };
-        document.head.appendChild(s);
-      });
-    }
-    (async function(){
-      try {
-        await load('https://unpkg.com/three@0.149.0/build/three.min.js');
-      } catch(e) {
-        await load('https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js');
-      }
-      // Try OrbitControls, but continue even if both CDNs fail (fallback in app.js will handle it)
-      let orbitLoaded = false;
-      try {
-        await load('https://unpkg.com/three@0.149.0/examples/js/controls/OrbitControls.js');
-        orbitLoaded = true;
-      } catch(e1) {
-        try {
-          await load('https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/controls/OrbitControls.js');
-          orbitLoaded = true;
-        } catch(e2) {
-          console.warn('OrbitControls failed to load from CDNs, using BasicOrbitControls fallback.', e2);
-        }
-      }
-      await load('app.js');
-    })();
-  })();
-  </script>
+  <!-- Load Three.js globally first -->
+  <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+  
+  <!-- Load the modular app -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>
