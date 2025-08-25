@@ -13,6 +13,7 @@ export let sunMilky = null;
 export let sunMilkyLabel = null;
 export let centerLabel = null;
 export let spiralArms = [];
+export let armLabelsGroup = null;
 export let starFormationRegions = [];
 export let dustLanes = null;
 export let galacticHalo = null;
@@ -20,6 +21,22 @@ export let coreGroup = null;
 export let accretionDisk = null;
 export let bulge = null;
 export let coreGlowSprites = [];
+
+// Basic dynamics state for differential rotation demo
+export const dynamics = {
+  enabled: false,
+  time: 0,
+  // Star rotation base scale (multiplier, 1.0 = default)
+  starSpeedScale: 1.0,
+  // Spiral arm pattern speed (radians per second)
+  patternSpeed: 0.004,
+  // Per-arm-star metadata (local to armsPoints)
+  armR: null,
+  armTheta0: null,
+  armOffset: null,
+  armY: null,
+  count: 0
+};
 
 export function createGalaxy(scene) {
   galaxyGroup = new THREE.Group();
@@ -40,6 +57,12 @@ export function createGalaxy(scene) {
   });
 
   const arms = makeBuffer(countArms);
+  // Allocate dynamics arrays for arm stars
+  dynamics.armR = new Float32Array(countArms);
+  dynamics.armTheta0 = new Float32Array(countArms);
+  dynamics.armOffset = new Float32Array(countArms);
+  dynamics.armY = new Float32Array(countArms);
+  dynamics.count = countArms;
   const bul = makeBuffer(countBulge);
   const halo = makeBuffer(countHalo);
 
@@ -56,6 +79,11 @@ export function createGalaxy(scene) {
     const z = Math.sin(angle) * radius + Math.sin(angle + Math.PI/2) * armOffset;
     const y = THREE.MathUtils.randFloatSpread(THICK * 0.8);
     arms.pos[i*3+0] = x; arms.pos[i*3+1] = y; arms.pos[i*3+2] = z;
+    // Record base parameters for dynamics updates
+    dynamics.armR[i] = radius;
+    dynamics.armTheta0[i] = angle;
+    dynamics.armOffset[i] = armOffset;
+    dynamics.armY[i] = y;
     const temp = Math.random();
     if (temp < 0.1) { // Hot blue giants
       arms.col[i*3+0] = 0.7 + Math.random()*0.2;
@@ -347,6 +375,8 @@ export function createGalaxy(scene) {
   // Add arm labels
   const armNames = ["Perseus Arm", "Orion Arm", "Sagittarius Arm", "Scutum Arm"];
   spiralArms = [];
+  armLabelsGroup = new THREE.Group();
+  galaxyGroup.add(armLabelsGroup);
   armNames.forEach((name, i) => {
     const armAngle = (i / ARMS) * Math.PI * 2;
     const labelRadius = R_MAX * 0.7;
@@ -357,7 +387,7 @@ export function createGalaxy(scene) {
     armLabel.position.set(labelX, 4, labelZ);
     armLabel.userData.isArmLabel = true;
     armLabel.userData.armName = name;
-    galaxyGroup.add(armLabel);
+    armLabelsGroup.add(armLabel);
     spiralArms.push(armLabel);
   });
 
@@ -374,6 +404,7 @@ export function createGalaxy(scene) {
     sunMilkyLabel,
     centerLabel,
     spiralArms,
+    armLabelsGroup,
     starFormationRegions,
     dustLanes,
     galacticHalo,
@@ -382,6 +413,54 @@ export function createGalaxy(scene) {
     bulge,
     coreGlowSprites
   };
+}
+
+// Simple, stylized angular speed model (radians/sec) for stars in the disk
+// Provides differential rotation: faster inside, slower outside, asymptotically flat-ish.
+function starOmegaAtRadius(r) {
+  const r0 = 20;           // scale length in scene units
+  const base = 0.04;       // base angular speed near inner disk
+  // Avoid singularity at r ~ 0; produce gentle falloff
+  const omega = base * (r0 / (r0 + Math.max(1, r)));
+  return omega * dynamics.starSpeedScale;
+}
+
+// Update dynamics each frame (called from app.js)
+export function updateDynamics(dt, armsPointsRef, armLabelsGroupRef) {
+  if (!dynamics.enabled) return;
+  dynamics.time += dt;
+  const pts = armsPointsRef || armsPoints;
+  if (!pts || !pts.geometry || !pts.geometry.attributes) return;
+
+  const pos = pts.geometry.attributes.position.array;
+  const n = dynamics.count;
+  for (let i = 0; i < n; i++) {
+    const r = dynamics.armR[i];
+    const theta = dynamics.armTheta0[i] + starOmegaAtRadius(r) * dynamics.time;
+    const off = dynamics.armOffset[i];
+    const y = dynamics.armY[i];
+    const cos = Math.cos(theta), sin = Math.sin(theta);
+    // Apply offset perpendicular to radial direction (follows rotation)
+    const px = cos * r + Math.cos(theta + Math.PI / 2) * off;
+    const pz = sin * r + Math.sin(theta + Math.PI / 2) * off;
+    pos[i*3+0] = px;
+    pos[i*3+1] = y;
+    pos[i*3+2] = pz;
+  }
+  pts.geometry.attributes.position.needsUpdate = true;
+
+  // Rotate the arm labels as a simple proxy for spiral pattern speed
+  const labels = armLabelsGroupRef || armLabelsGroup;
+  if (labels) labels.rotation.y += dynamics.patternSpeed * dt;
+}
+
+export function setDynamicsEnabled(flag) {
+  dynamics.enabled = !!flag;
+}
+
+export function setDynamicsParams({ starSpeedScale, patternSpeed } = {}) {
+  if (typeof starSpeedScale === 'number') dynamics.starSpeedScale = starSpeedScale;
+  if (typeof patternSpeed === 'number') dynamics.patternSpeed = patternSpeed;
 }
 
 // Create dust lanes for visual realism

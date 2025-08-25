@@ -6,7 +6,7 @@ import { createRenderer } from './src/core/renderer.js';
 import { createLights } from './src/core/lights.js';
 import { BasicOrbitControls } from './src/core/controls.js';
 import { createSolarSystem } from './src/scene/solarSystem.js';
-import { createGalaxy } from './src/scene/galaxy.js';
+import { createGalaxy, updateDynamics, setDynamicsEnabled, setDynamicsParams } from './src/scene/galaxy.js';
 import { getUIElements } from './src/ui/elements.js';
 import { setInfoFor, setGalaxyInfo, updateLegend } from './src/ui/info.js';
 import { updateAllLabelScales } from './src/ui/labels.js';
@@ -61,7 +61,11 @@ function saveSettings() {
       bulgeOpacity: document.getElementById('bulgeOpacity')?.value,
       haloOpacity: document.getElementById('haloOpacity')?.value,
       coreGlow: document.getElementById('coreGlow')?.value,
-      fogDensity: document.getElementById('fogDensity')?.value
+      fogDensity: document.getElementById('fogDensity')?.value,
+      // Dynamics
+      galaxyDynamics: document.getElementById('galaxyDynamics')?.checked,
+      stellarRotation: document.getElementById('stellarRotation')?.value,
+      armPattern: document.getElementById('armPattern')?.value
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   } catch(_){}
@@ -89,6 +93,16 @@ function applySettingsFromStorage() {
     setChk('showSunOrbit', s.showSunOrbit); setVal('armsOpacity', s.armsOpacity);
     setVal('bulgeOpacity', s.bulgeOpacity); setVal('haloOpacity', s.haloOpacity);
     setVal('coreGlow', s.coreGlow); setVal('fogDensity', s.fogDensity);
+    // Dynamics
+    if (typeof s.galaxyDynamics === 'boolean') {
+      const sw = document.getElementById('galaxyDynamics');
+      const lb = document.getElementById('galaxyDynamicsLabel');
+      if (sw) sw.checked = !!s.galaxyDynamics;
+      if (lb) lb.classList.toggle('active', !!s.galaxyDynamics);
+      setDynamicsEnabled(!!s.galaxyDynamics);
+    }
+    setVal('stellarRotation', s.stellarRotation);
+    setVal('armPattern', s.armPattern);
     if (s.mode === 'galaxy') setMode('galaxy');
     // Ensure focus change applies handlers (camera+info) by dispatching events
     if (s.galaxyFocus) { setVal('galaxyFocus', s.galaxyFocus); }
@@ -185,6 +199,8 @@ function animate() {
     if (galaxyAutoRotate && galaxyGroup) {
       galaxyGroup.rotation.y += galaxyRotationSpeed * dt;
     }
+    // Galaxy dynamics: per‑star differential rotation + arm pattern speed
+    updateDynamics(dt);
   }
   
   if (camLerp < 1) {
@@ -627,6 +643,10 @@ function setupEventHandlers() {
       setVal('haloOpacity', 65);
       setVal('coreGlow', 80);
       setVal('fogDensity', 15);
+      // Dynamics defaults
+      setChk('galaxyDynamics', false);
+      setVal('stellarRotation', 100);
+      setVal('armPattern', 4);
       const gf = document.getElementById('galaxyFocus'); if (gf) gf.value = 'wide';
       resetGalaxyView(); setGalaxyInfo('wide');
       saveSettings();
@@ -723,6 +743,49 @@ function setupEventHandlers() {
     });
     
     setSpinLabel();
+  }
+
+  // Galaxy dynamics controls
+  const galaxyDynamicsEl = document.getElementById('galaxyDynamics');
+  const galaxyDynamicsLabel = document.getElementById('galaxyDynamicsLabel');
+  if (galaxyDynamicsEl) {
+    const syncDynUI = () => {
+      if (galaxyDynamicsLabel) galaxyDynamicsLabel.classList.toggle('active', !!galaxyDynamicsEl.checked);
+    };
+    galaxyDynamicsEl.addEventListener('change', () => {
+      setDynamicsEnabled(!!galaxyDynamicsEl.checked);
+      syncDynUI();
+      saveSettings();
+    });
+    syncDynUI();
+  }
+
+  const stellarRotationEl = document.getElementById('stellarRotation');
+  const stellarRotationVal = document.getElementById('stellarRotationVal');
+  if (stellarRotationEl) {
+    const apply = () => {
+      const pct = parseInt(stellarRotationEl.value, 10) || 100;
+      const scale = THREE.MathUtils.clamp(pct / 100, 0.1, 3.0);
+      setDynamicsParams({ starSpeedScale: scale });
+      if (stellarRotationVal) stellarRotationVal.textContent = `${pct}%`;
+    };
+    stellarRotationEl.addEventListener('input', apply);
+    apply();
+    stellarRotationEl.addEventListener('change', saveSettings);
+  }
+
+  const armPatternEl = document.getElementById('armPattern');
+  const armPatternVal = document.getElementById('armPatternVal');
+  if (armPatternEl) {
+    const apply = () => {
+      const v = parseInt(armPatternEl.value, 10) || 0; // -20..20
+      const speed = (v / 20) * 0.02; // -0.02..0.02 rad/s
+      setDynamicsParams({ patternSpeed: speed });
+      if (armPatternVal) armPatternVal.textContent = `× ${(speed / 0.01).toFixed(1)}`;
+    };
+    armPatternEl.addEventListener('input', apply);
+    apply();
+    armPatternEl.addEventListener('change', saveSettings);
   }
 
   // Star brightness
@@ -1021,24 +1084,7 @@ function setupEventHandlers() {
     renderer.domElement.addEventListener("pointerdown", pointerDownHandler);
   }
 
-  // Screenshot
-  const btnScreenshot = document.getElementById('btnScreenshot');
-  if (btnScreenshot) {
-    btnScreenshot.addEventListener('click', () => {
-      try {
-        const data = renderer.domElement.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = data;
-        const modeLabel = mode === 'galaxy' ? 'galaxy' : 'solar';
-        a.download = `space-viz-${modeLabel}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      } catch (e) {
-        console.error('Screenshot failed:', e);
-      }
-    });
-  }
+  // (Screenshot feature removed)
 
   // Resize handler
   window.addEventListener("resize", () => {

@@ -123,6 +123,29 @@
       <span class="pill" id="galaxySpinVal">× 0.5</span>
     </div>
 
+    <!-- Dynamics mode: differential rotation and pattern speed -->
+    <div class="row mode-galaxy" title="Animate per‑star differential rotation and spiral arm pattern speed">
+      <div class="switch">
+        <input type="checkbox" id="galaxyDynamics" aria-label="Dynamics" />
+        <label id="galaxyDynamicsLabel" for="galaxyDynamics">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-text">Dynamics</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="stellarRotation">Stellar rotation</label>
+      <input type="range" id="stellarRotation" min="20" max="300" value="100" />
+      <span class="pill" id="stellarRotationVal">100%</span>
+    </div>
+
+    <div class="row mode-galaxy">
+      <label for="armPattern">Arm pattern speed</label>
+      <input type="range" id="armPattern" min="-20" max="20" value="4" />
+      <span class="pill" id="armPatternVal">× 0.4</span>
+    </div>
+
     <div class="row mode-galaxy">
       <label for="galaxyTilt">Tilt</label>
       <input type="range" id="galaxyTilt" min="0" max="60" value="15" />
@@ -208,8 +231,6 @@
 
     <div class="row mode-galaxy">
       <button id="btnGalaxyTour">Auto tour (Galaxy)</button>
-      <span class="spacer"></span>
-      <button id="btnScreenshot">Screenshot</button>
     </div>
 
     <div class="small">Drag to rotate · Wheel/pinch to zoom · Right-drag to pan · Space: Play/Pause (Solar) or Auto‑rotate (Galaxy) · Z: Reset Zoom · R: Reset View · U: Hide UI · ?: Help</div>
@@ -237,7 +258,7 @@
         <li><b>U</b>: Hide/Show UI for a clean view · <b>?</b>/<b>H</b>: Toggle this help.</li>
         <li>Solar: use <b>Focus</b> dropdown or click a planet. <b>Lock camera</b> to follow motion.</li>
         <li>Galaxy: click the <b>Core</b> glow or <b>Sol marker</b> to focus. Use spin/tilt/brightness for clarity.</li>
-        <li>Try <b>Screenshot</b> in Galaxy for a quick export.</li>
+        
       </ul>
       <div class="help-actions">
         <button id="btnCloseHelp">Close (Esc)</button>
