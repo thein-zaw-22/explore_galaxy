@@ -28,6 +28,7 @@ let camFromPos = new THREE.Vector3(), camToPos = new THREE.Vector3();
 let targetFrom = new THREE.Vector3(), targetTo = new THREE.Vector3(0, 0, 0);
 const mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
 let uiElements;
+let _accordionInitialized = false; // manage mobile accordions default state
 // Reusable temp vector to avoid per-frame allocations
 const _tmpVec3 = new THREE.Vector3();
 // Galaxy tour state
@@ -157,6 +158,9 @@ async function init() {
   // Apply any saved settings and possibly switch mode
   applySettingsFromStorage();
   setInfoFor("Sun");
+
+  // Set default accordion state: open on desktop, collapsed on mobile
+  setupAccordions();
   
   // Ensure camera animation is complete to prevent interference
   camLerp = 1;
@@ -449,6 +453,15 @@ function setupEventHandlers() {
   };
   if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoomOnly);
 
+  const toggleUIVisible = () => {
+    const ui = document.getElementById('ui');
+    const legend = document.getElementById('legend');
+    const info = document.getElementById('infoPanel');
+    ui && ui.classList.toggle('hidden');
+    legend && legend.classList.toggle('hidden');
+    info && info.classList.toggle('hidden');
+  };
+
   // Keyboard shortcuts: Z = Reset Zoom, R = Reset View
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
@@ -483,12 +496,7 @@ function setupEventHandlers() {
       const o = document.getElementById('helpOverlay');
       if (o) o.classList.toggle('active');
     } else if (k === 'u') {
-      const ui = document.getElementById('ui');
-      const legend = document.getElementById('legend');
-      const info = document.getElementById('infoPanel');
-      ui && ui.classList.toggle('hidden');
-      legend && legend.classList.toggle('hidden');
-      info && info.classList.toggle('hidden');
+      toggleUIVisible();
     } else if (k === 'z') {
       e.preventDefault();
       resetZoomOnly();
@@ -504,6 +512,37 @@ function setupEventHandlers() {
       }
     }
   });
+
+  // Mobile FAB to show/hide UI with enhanced functionality
+  const uiToggleFab = document.getElementById('uiToggleFab');
+  if (uiToggleFab) {
+    uiToggleFab.addEventListener('click', () => {
+      toggleUIVisible();
+      // On mobile, when showing UI, ensure accordions are in appropriate state
+      if (isTouchDevice()) {
+        const ui = document.getElementById('ui');
+        if (ui && !ui.classList.contains('hidden')) {
+          // Reset accordion states for better mobile experience
+          setTimeout(() => {
+            applyAccordionDefaults();
+          }, 100);
+        }
+      }
+    });
+    
+    // Add touch feedback for FAB button
+    uiToggleFab.addEventListener('touchstart', () => {
+      uiToggleFab.style.transform = 'scale(0.95)';
+    });
+    
+    uiToggleFab.addEventListener('touchend', () => {
+      uiToggleFab.style.transform = '';
+    });
+    
+    uiToggleFab.addEventListener('touchcancel', () => {
+      uiToggleFab.style.transform = '';
+    });
+  }
 
   // Help overlay accessibility: focus trap + return focus
   const helpBtn = document.getElementById('btnHelp');
@@ -1086,16 +1125,107 @@ function setupEventHandlers() {
 
   // (Screenshot feature removed)
 
-  // Resize handler
+  // Resize handler with improved mobile support
   window.addEventListener("resize", () => {
     if (camera) {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
     }
     if (renderer) {
+      // Re-evaluate DPR and size on resize/orientation change for mobile clarity
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
+    
+    // Enhanced accordion handling for mobile orientation changes
+    if (isTouchDevice()) {
+      // Delay accordion defaults application to ensure smooth transition
+      setTimeout(() => {
+        applyAccordionDefaults();
+      }, 300);
+    } else {
+      // Re-apply accordion defaults on orientation change unless user changed them
+      applyAccordionDefaults();
+    }
   });
+  
+  // Add orientation change handler for mobile devices
+  if ('onorientationchange' in window) {
+    window.addEventListener('orientationchange', () => {
+      // Delay handling to ensure viewport has settled
+      setTimeout(() => {
+        if (camera) {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+        }
+        if (renderer) {
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        applyAccordionDefaults();
+      }, 500);
+    });
+  }
 }
 
 init();
+
+// Accordion helpers: default open on desktop, collapsed on mobile.
+function setupAccordions() {
+  const acc = Array.from(document.querySelectorAll('details.accordion'));
+  acc.forEach(d => {
+    // Enhanced toggle event handling with touch support
+    d.addEventListener('toggle', () => {
+      // mark as user-toggled to avoid overriding on resize
+      d.dataset.userSet = '1';
+    });
+    
+    // Add touch event handling for better mobile interaction
+    const summary = d.querySelector('summary');
+    if (summary) {
+      // Prevent double-tap zoom on mobile
+      summary.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        // Use a small delay to ensure proper accordion toggle
+        setTimeout(() => {
+          d.open = !d.open;
+          d.dataset.userSet = '1';
+        }, 10);
+      }, { passive: false });
+      
+      // Add visual feedback for touch
+      summary.addEventListener('touchstart', () => {
+        summary.style.opacity = '0.7';
+      });
+      
+      summary.addEventListener('touchend', () => {
+        setTimeout(() => {
+          summary.style.opacity = '';
+        }, 150);
+      });
+      
+      summary.addEventListener('touchcancel', () => {
+        summary.style.opacity = '';
+      });
+    }
+  });
+  _accordionInitialized = true;
+  applyAccordionDefaults();
+}
+
+function applyAccordionDefaults() {
+  if (!_accordionInitialized) return;
+  // Improved mobile detection: consider both width and touch capability
+  const isMobile = window.innerWidth <= 800 || ('ontouchstart' in window && window.innerWidth <= 1024);
+  const shouldOpen = !isMobile;
+  const acc = Array.from(document.querySelectorAll('details.accordion'));
+  acc.forEach(d => {
+    if (d.dataset.userSet === '1') return;
+    d.open = shouldOpen;
+  });
+}
+
+// Helper function to detect if device is actually mobile/touch
+function isTouchDevice() {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+}

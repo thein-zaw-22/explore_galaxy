@@ -23,14 +23,74 @@ export class BasicOrbitControls {
     this._state = 'none'; // 'rotate' | 'pan' | 'none'
     this._pointer = new THREE.Vector2();
 
+    // Multi-touch state
+    this._pointers = new Map(); // id -> Vector2
+    this._touchMode = 'none'; // 'panzoom' | 'none'
+    this._lastPinchDist = 0;
+    this._lastPinchCenter = new THREE.Vector2();
+
     this._onPointerDown = (e) => {
       e.preventDefault();
-      this.domElement.setPointerCapture(e.pointerId || 1);
-      if (e.button === 2 || (e.button === 0 && e.ctrlKey)) this._state = 'pan';
-      else this._state = 'rotate';
-      this._pointer.set(e.clientX, e.clientY);
+      const id = e.pointerId || 1;
+      this._pointers.set(id, new THREE.Vector2(e.clientX, e.clientY));
+      try { this.domElement.setPointerCapture(id); } catch(_){}
+
+      if (this._pointers.size === 1) {
+        // Single pointer: rotate or pan (with right click / ctrl)
+        if (e.button === 2 || (e.button === 0 && e.ctrlKey)) this._state = 'pan';
+        else this._state = 'rotate';
+        this._pointer.set(e.clientX, e.clientY);
+        this._touchMode = 'none';
+      } else if (this._pointers.size >= 2) {
+        // Two-finger pan/zoom mode
+        this._touchMode = 'panzoom';
+        this._state = 'none';
+        const pts = Array.from(this._pointers.values());
+        const c = new THREE.Vector2((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+        const d = pts[0].clone().sub(pts[1]).length();
+        this._lastPinchCenter.copy(c);
+        this._lastPinchDist = d || 0;
+      }
     };
     this._onPointerMove = (e) => {
+      const id = e.pointerId || 1;
+      if (this._pointers.has(id)) {
+        this._pointers.get(id).set(e.clientX, e.clientY);
+      }
+
+      if (this._touchMode === 'panzoom' && this._pointers.size >= 2) {
+        // Compute center and distance
+        const pts = Array.from(this._pointers.values());
+        const c = new THREE.Vector2((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+        const d = pts[0].clone().sub(pts[1]).length();
+
+        // Zoom by pinch distance ratio
+        if (this._lastPinchDist > 0 && d > 0) {
+          const ratio = d / this._lastPinchDist;
+          // ratio > 1 => fingers apart => zoom in (reduce radius)
+          this._zoomScale *= (1 / ratio);
+        }
+
+        // Pan by center delta
+        const dx = c.x - this._lastPinchCenter.x;
+        const dy = c.y - this._lastPinchCenter.y;
+        const offset = new THREE.Vector3();
+        offset.copy(this.object.position).sub(this.target);
+        const targetDistance = offset.length();
+        const panX = (-dx * this._panSpeed) * (targetDistance / 50);
+        const panY = (dy * this._panSpeed) * (targetDistance / 50);
+        const te = this.object.matrix.elements;
+        const xAxis = new THREE.Vector3(te[0], te[1], te[2]);
+        const yAxis = new THREE.Vector3(te[4], te[5], te[6]);
+        xAxis.multiplyScalar(panX);
+        yAxis.multiplyScalar(panY);
+        this._panOffset.add(xAxis).add(yAxis);
+
+        this._lastPinchCenter.copy(c);
+        this._lastPinchDist = d;
+        return; // handled
+      }
+
       if (this._state === 'none') return;
       const dx = e.clientX - this._pointer.x;
       const dy = e.clientY - this._pointer.y;
@@ -54,8 +114,24 @@ export class BasicOrbitControls {
       }
     };
     this._onPointerUp = (e) => {
+      const id = e.pointerId || 1;
+      this._pointers.delete(id);
+      if (this._pointers.size < 2) {
+        this._touchMode = 'none';
+        this._lastPinchDist = 0;
+      }
       this._state = 'none';
-      try { this.domElement.releasePointerCapture(e.pointerId || 1); } catch(_){}
+      try { this.domElement.releasePointerCapture(id); } catch(_){}
+    };
+    this._onPointerCancel = (e) => {
+      const id = e.pointerId || 1;
+      this._pointers.delete(id);
+      if (this._pointers.size < 2) {
+        this._touchMode = 'none';
+        this._lastPinchDist = 0;
+      }
+      this._state = 'none';
+      try { this.domElement.releasePointerCapture(id); } catch(_){}
     };
     this._onWheel = (e) => {
       e.preventDefault();
@@ -67,6 +143,7 @@ export class BasicOrbitControls {
     domElement.addEventListener('pointermove', this._onPointerMove);
     domElement.addEventListener('pointerup', this._onPointerUp);
     domElement.addEventListener('wheel', this._onWheel, { passive: false });
+    domElement.addEventListener('pointercancel', this._onPointerCancel);
   }
   update(){
     // Apply zoom

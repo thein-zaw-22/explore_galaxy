@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Galaxy Visualization</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css" />
@@ -123,105 +123,100 @@
       <span class="pill" id="galaxySpinVal">× 0.5</span>
     </div>
 
-    <!-- Dynamics mode: differential rotation and pattern speed -->
-    <div class="row mode-galaxy" title="Animate per‑star differential rotation and spiral arm pattern speed">
-      <div class="switch">
-        <input type="checkbox" id="galaxyDynamics" aria-label="Dynamics" />
-        <label id="galaxyDynamicsLabel" for="galaxyDynamics">
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-          <span class="switch-text">Dynamics</span>
-        </label>
+    <!-- Collapsible: Dynamics -->
+    <details class="accordion mode-galaxy" id="galaxyDynAccordion" title="Animate per‑star differential rotation and spiral arm pattern speed">
+      <summary>Dynamics</summary>
+      <div class="row mode-galaxy">
+        <div class="switch">
+          <input type="checkbox" id="galaxyDynamics" aria-label="Dynamics" />
+          <label id="galaxyDynamicsLabel" for="galaxyDynamics">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Enable dynamics</span>
+          </label>
+        </div>
       </div>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="stellarRotation">Stellar rotation</label>
-      <input type="range" id="stellarRotation" min="20" max="300" value="100" />
-      <span class="pill" id="stellarRotationVal">100%</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="armPattern">Arm pattern speed</label>
-      <input type="range" id="armPattern" min="-20" max="20" value="4" />
-      <span class="pill" id="armPatternVal">× 0.4</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="galaxyTilt">Tilt</label>
-      <input type="range" id="galaxyTilt" min="0" max="60" value="15" />
-      <span class="pill" id="galaxyTiltVal">15°</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="starBrightness">Star brightness</label>
-      <input type="range" id="starBrightness" min="30" max="130" value="90" />
-      <span class="pill" id="starBrightnessVal">90%</span>
-    </div>
-    
-    <div class="row mode-galaxy">
-      <label for="starSize">Star size</label>
-      <input type="range" id="starSize" min="50" max="200" value="100" />
-      <span class="pill" id="starSizeVal">100%</span>
-    </div>
-    
-    <div class="row mode-galaxy">
-      <label for="nebulaVisibility">Nebulae visibility</label>
-      <input type="range" id="nebulaVisibility" min="0" max="100" value="60" />
-      <span class="pill" id="nebulaVisibilityVal">60%</span>
-    </div>
-    
-    <div class="row mode-galaxy">
-      <label for="dustLaneVisibility">Dust lanes</label>
-      <input type="range" id="dustLaneVisibility" min="0" max="100" value="40" />
-      <span class="pill" id="dustLaneVisibilityVal">40%</span>
-    </div>
-    
-    <div class="row mode-galaxy">
-      <div class="switch">
-        <input type="checkbox" id="showGalaxyArms" checked aria-label="Show arm labels" />
-        <label id="showGalaxyArmsLabel" for="showGalaxyArms">
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-          <span class="switch-text">Show arm labels</span>
-        </label>
+      <div class="row mode-galaxy">
+        <label for="stellarRotation">Stellar rotation</label>
+        <input type="range" id="stellarRotation" min="20" max="300" value="100" />
+        <span class="pill" id="stellarRotationVal">100%</span>
       </div>
-      <div class="switch">
-        <input type="checkbox" id="showSunOrbit" checked aria-label="Show Sun orbit" />
-        <label id="showSunOrbitLabel" for="showSunOrbit">
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-          <span class="switch-text">Show Sun orbit</span>
-        </label>
+      <div class="row mode-galaxy">
+        <label for="armPattern">Arm pattern speed</label>
+        <input type="range" id="armPattern" min="-20" max="20" value="4" />
+        <span class="pill" id="armPatternVal">× 0.4</span>
       </div>
-    </div>
+    </details>
 
-    <div class="row mode-galaxy">
-      <label for="armsOpacity">Arms</label>
-      <input type="range" id="armsOpacity" min="0" max="100" value="100" />
-      <span class="pill" id="armsOpacityVal">100%</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="bulgeOpacity">Bulge</label>
-      <input type="range" id="bulgeOpacity" min="0" max="100" value="85" />
-      <span class="pill" id="bulgeOpacityVal">85%</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="haloOpacity">Halo</label>
-      <input type="range" id="haloOpacity" min="0" max="100" value="65" />
-      <span class="pill" id="haloOpacityVal">65%</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="coreGlow">Core glow</label>
-      <input type="range" id="coreGlow" min="0" max="100" value="80" />
-      <span class="pill" id="coreGlowVal">80%</span>
-    </div>
-
-    <div class="row mode-galaxy">
-      <label for="fogDensity">Haze</label>
-      <input type="range" id="fogDensity" min="0" max="100" value="15" />
-      <span class="pill" id="fogDensityVal">15%</span>
-    </div>
+    <!-- Collapsible: Appearance -->
+    <details class="accordion mode-galaxy" id="galaxyAppAccordion">
+      <summary>Appearance</summary>
+      <div class="row mode-galaxy">
+        <label for="galaxyTilt">Tilt</label>
+        <input type="range" id="galaxyTilt" min="0" max="60" value="15" />
+        <span class="pill" id="galaxyTiltVal">15°</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="starBrightness">Star brightness</label>
+        <input type="range" id="starBrightness" min="30" max="130" value="90" />
+        <span class="pill" id="starBrightnessVal">90%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="starSize">Star size</label>
+        <input type="range" id="starSize" min="50" max="200" value="100" />
+        <span class="pill" id="starSizeVal">100%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="nebulaVisibility">Nebulae visibility</label>
+        <input type="range" id="nebulaVisibility" min="0" max="100" value="60" />
+        <span class="pill" id="nebulaVisibilityVal">60%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="dustLaneVisibility">Dust lanes</label>
+        <input type="range" id="dustLaneVisibility" min="0" max="100" value="40" />
+        <span class="pill" id="dustLaneVisibilityVal">40%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <div class="switch">
+          <input type="checkbox" id="showGalaxyArms" checked aria-label="Show arm labels" />
+          <label id="showGalaxyArmsLabel" for="showGalaxyArms">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Show arm labels</span>
+          </label>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="showSunOrbit" checked aria-label="Show Sun orbit" />
+          <label id="showSunOrbitLabel" for="showSunOrbit">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Show Sun orbit</span>
+          </label>
+        </div>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="armsOpacity">Arms</label>
+        <input type="range" id="armsOpacity" min="0" max="100" value="100" />
+        <span class="pill" id="armsOpacityVal">100%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="bulgeOpacity">Bulge</label>
+        <input type="range" id="bulgeOpacity" min="0" max="100" value="85" />
+        <span class="pill" id="bulgeOpacityVal">85%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="haloOpacity">Halo</label>
+        <input type="range" id="haloOpacity" min="0" max="100" value="65" />
+        <span class="pill" id="haloOpacityVal">65%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="coreGlow">Core glow</label>
+        <input type="range" id="coreGlow" min="0" max="100" value="80" />
+        <span class="pill" id="coreGlowVal">80%</span>
+      </div>
+      <div class="row mode-galaxy">
+        <label for="fogDensity">Haze</label>
+        <input type="range" id="fogDensity" min="0" max="100" value="15" />
+        <span class="pill" id="fogDensityVal">15%</span>
+      </div>
+    </details>
 
     <div class="row mode-galaxy">
       <button id="resetGalaxyView" title="Recenter the galaxy view (keeps tilt)">Reset View</button>
@@ -281,5 +276,8 @@
   
   <!-- Load the modular app -->
   <script type="module" src="app.js"></script>
+
+  <!-- Mobile UI toggle (shown when controls are hidden) -->
+  <button id="uiToggleFab" class="fab" aria-label="Show controls" title="Show controls">☰</button>
 </body>
 </html>
