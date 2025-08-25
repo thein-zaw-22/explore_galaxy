@@ -325,8 +325,9 @@ function setMode(next) {
 function resetSolarView() {
   // Frame based on outermost orbit with comfortable padding
   const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
-  const y = r * 1.25;
-  const z = r * 3.1;
+  const distScale = getCamDistScale();
+  const y = r * 1.25 * distScale;
+  const z = r * 3.1 * distScale;
   camera.position.set(0, y, z);
   controls.target.set(0, 0, 0);
   controls.update();
@@ -359,7 +360,7 @@ function setupEventHandlers() {
     let dist;
     if (mode === 'solar') {
       const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
-      dist = Math.max(100, r * 3.2);
+      dist = Math.max(100, r * 3.2) * getCamDistScale();
     } else {
       dist = 300 * getCamDistScale(); // scale default galaxy framing distance
     }
