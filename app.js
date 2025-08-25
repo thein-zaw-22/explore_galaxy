@@ -351,6 +351,9 @@ function setMode(next) {
     controls.maxDistance = Math.max(160, r * 4.0);
     resetSolarView();
     updateLegend('solar');
+    
+    // Update info panel to show Solar System quick facts
+    setInfoFor("Sun");
   } else {
     camera.near = 0.1; camera.far = 8000; camera.updateProjectionMatrix();
     controls.minDistance = 30; controls.maxDistance = 3000;
@@ -457,9 +460,17 @@ function setupEventHandlers() {
     const ui = document.getElementById('ui');
     const legend = document.getElementById('legend');
     const info = document.getElementById('infoPanel');
-    ui && ui.classList.toggle('hidden');
-    legend && legend.classList.toggle('hidden');
-    info && info.classList.toggle('hidden');
+    
+    // Only toggle UI on desktop, mobile uses slide menu
+    if (window.innerWidth >= 768) {
+      ui && ui.classList.toggle('hidden');
+      legend && legend.classList.toggle('hidden');
+      info && info.classList.toggle('hidden');
+    } else {
+      // On mobile, just toggle the UI slide menu
+      ui && ui.classList.toggle('hidden');
+      // Don't auto-toggle info panel on mobile, user controls it separately
+    }
   };
 
   // Keyboard shortcuts: Z = Reset Zoom, R = Reset View
@@ -513,16 +524,27 @@ function setupEventHandlers() {
     }
   });
 
-  // Mobile FAB to show/hide UI with enhanced functionality
+  // Mobile UI controls - slide menu and info toggle
   const uiToggleFab = document.getElementById('uiToggleFab');
+  const infoToggleFab = document.getElementById('infoToggleFab');
+  const infoPanel = document.getElementById('infoPanel');
+  
   if (uiToggleFab) {
     uiToggleFab.addEventListener('click', () => {
-      toggleUIVisible();
+      const ui = document.getElementById('ui');
+      if (ui) {
+        ui.classList.toggle('hidden');
+        // Update FAB icon based on state
+        uiToggleFab.innerHTML = ui.classList.contains('hidden') ? '☰' : '✕';
+        uiToggleFab.setAttribute('aria-label', 
+          ui.classList.contains('hidden') ? 'Show controls' : 'Hide controls'
+        );
+      }
+      
       // On mobile, when showing UI, ensure accordions are in appropriate state
       if (isTouchDevice()) {
         const ui = document.getElementById('ui');
         if (ui && !ui.classList.contains('hidden')) {
-          // Reset accordion states for better mobile experience
           setTimeout(() => {
             applyAccordionDefaults();
           }, 100);
@@ -542,6 +564,39 @@ function setupEventHandlers() {
     uiToggleFab.addEventListener('touchcancel', () => {
       uiToggleFab.style.transform = '';
     });
+  }
+  
+  // Info toggle for mobile
+  if (infoToggleFab && infoPanel) {
+    infoToggleFab.addEventListener('click', () => {
+      infoPanel.classList.toggle('visible');
+      // Update button icon based on state
+      infoToggleFab.innerHTML = infoPanel.classList.contains('visible') ? '✕' : 'ℹ️';
+      infoToggleFab.setAttribute('aria-label', 
+        infoPanel.classList.contains('visible') ? 'Hide info' : 'Show info'
+      );
+    });
+    
+    // Add touch feedback
+    infoToggleFab.addEventListener('touchstart', () => {
+      infoToggleFab.style.transform = 'scale(0.95)';
+    });
+    
+    infoToggleFab.addEventListener('touchend', () => {
+      infoToggleFab.style.transform = '';
+    });
+    
+    infoToggleFab.addEventListener('touchcancel', () => {
+      infoToggleFab.style.transform = '';
+    });
+  }
+  
+  // Initialize UI state for mobile
+  if (isTouchDevice()) {
+    const ui = document.getElementById('ui');
+    if (ui) {
+      ui.classList.add('hidden'); // Start hidden on mobile
+    }
   }
 
   // Help overlay accessibility: focus trap + return focus

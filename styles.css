@@ -18,42 +18,59 @@ html, body {
   #scene { height: 100dvh; }
 }
 
-/* UI - Mobile-first responsive design */
+/* UI - Mobile-first slide menu design */
 .ui {
   position: fixed; 
-  z-index: 3;
-  background: rgba(8,12,20,.6); 
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,.08); 
-  border-radius: 14px;
-  padding: 12px 14px; 
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  z-index: 1000;
+  background: rgba(8,12,20,.95); 
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.12); 
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+  transition: transform 0.3s ease;
   
-  /* Mobile-first: bottom sheet style layout */
-  left: calc(8px + env(safe-area-inset-left));
-  right: calc(8px + env(safe-area-inset-right));
-  bottom: calc(8px + env(safe-area-inset-bottom));
-  max-height: 45vh; /* Take maximum 45% of screen height */
-  width: auto; /* Use available space minus margins */
+  /* Mobile-first: slide-out menu from left */
+  top: 0;
+  left: 0;
+  width: 320px;
+  height: 100vh;
+  height: 100dvh;
+  border-radius: 0 16px 16px 0;
+  padding: 20px 16px;
+  
+  /* Initially hidden off-screen */
+  transform: translateX(-100%);
+}
+
+/* Show menu when not hidden */
+.ui:not(.hidden) {
+  transform: translateX(0);
 }
 
 @supports (height: 100dvh) {
-  .ui { max-height: 45dvh; }
+  .ui { height: 100dvh; }
 }
 
-/* Desktop override: traditional left sidebar */
+/* Desktop override: traditional left sidebar, always visible */
 @media (min-width: 768px) {
   .ui {
+    position: fixed;
     left: calc(16px + env(safe-area-inset-left));
     top: calc(16px + env(safe-area-inset-top));
-    bottom: auto;
-    right: auto;
-    max-width: 360px;
-    max-height: calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     width: auto;
+    max-width: 360px;
+    height: auto;
+    max-height: calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(8,12,20,.6);
+    transform: none; /* Always visible on desktop */
+  }
+  
+  .ui.hidden {
+    transform: none; /* Ignore hidden class on desktop */
   }
   
   @supports (height: 100dvh) {
@@ -226,26 +243,59 @@ select {
 .help-card ul { margin: 8px 0 0 18px; line-height: 1.5; font-size: 13px; }
 .help-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
 .help-actions button { padding:6px 10px; border-radius:8px; background: rgba(255,255,255,.08); color:#e6e9ef; border:1px solid rgba(255,255,255,.12); cursor:pointer; }
+/* Info panel - Responsive aside element */
 .info {
   position: fixed;
-  left: calc(16px + env(safe-area-inset-left));
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  z-index: 3;
-  background: rgba(8,12,20,.65);
+  z-index: 999;
+  background: rgba(8,12,20,.9);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
   border-radius: 12px;
-  padding: 10px 12px;
-  max-width: min(44vw, 360px);
+  padding: 12px 14px;
   color: #e6e9ef;
   font-size: 12px;
   line-height: 1.45;
+  transition: all 0.3s ease;
+  
+  /* Mobile: bottom-right, compact */
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  right: calc(20px + env(safe-area-inset-right));
+  max-width: calc(100vw - 40px);
+  width: 280px;
+  
+  /* Hide by default on mobile to avoid overlap */
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
 }
-.ui[data-mode="galaxy"] ~ .info {
-  /* In Milky Way mode, move info to bottom-right to avoid overlap with tall UI */
-  left: auto;
-  right: calc(16px + env(safe-area-inset-right));
+
+/* Show info panel when needed */
+.info.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Desktop: traditional bottom-left positioning, always visible */
+@media (min-width: 768px) {
+  .info {
+    left: calc(16px + env(safe-area-inset-left));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    right: auto;
+    max-width: min(44vw, 360px);
+    width: auto;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    background: rgba(8,12,20,.65);
+  }
+  
+  /* Galaxy mode: move to bottom-right to avoid UI overlap */
+  .ui[data-mode="galaxy"] ~ .info {
+    left: auto;
+    right: calc(16px + env(safe-area-inset-right));
+  }
 }
 .info-title {
   font-weight: 700;
@@ -257,33 +307,28 @@ select {
 }
 /* Mobile and tablet optimizations */
 @media (max-width: 767px) {
-  .ui {
-    /* Add visual cue for bottom sheet */
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    /* Add subtle drag indicator */
-    background: 
-      linear-gradient(90deg, transparent 45%, rgba(255,255,255,0.2) 47%, rgba(255,255,255,0.2) 53%, transparent 55%) top center/60px 4px no-repeat,
-      rgba(8,12,20,.6);
-    padding-top: 16px;
-  }
-  
   .ui h1 { 
     font-size: 14px; 
     white-space: normal; 
     line-height: 1.25; 
+    margin-bottom: 12px;
+  }
+  
+  .ui {
+    /* Adjust padding for mobile slide menu */
+    padding: 24px 20px 20px 20px;
+    width: 300px; /* Slightly narrower on small screens */
   }
   
   .mode-toggle { 
     gap: 4px; 
     flex-wrap: wrap; 
+    margin-bottom: 12px;
   }
   
   .mode-toggle button { 
     font-size: 12px; 
-    padding: 8px 10px; 
+    padding: 10px 12px; 
   }
   
   .mode-toggle #btnSolar, 
@@ -295,27 +340,26 @@ select {
   .mode-toggle #btnHelp { 
     order: 3; 
     flex: 1 1 100%; 
+    margin-top: 4px;
   }
   
   .row { 
     gap: 8px; 
+    margin: 10px 0;
   }
   
   .ui input[type="range"] { 
     flex-basis: 100%; 
+    margin-top: 4px;
   }
   
   .ui select { 
     flex-basis: 100%; 
+    margin-top: 4px;
   }
   
   .legend { 
-    display: none; /* save space on small screens */ 
-  }
-  
-  .info { 
-    max-width: 86vw; 
-    font-size: 12px; 
+    display: none; /* hide on mobile to save space */ 
   }
 }
 
@@ -328,21 +372,20 @@ select {
   }
 }
 
-/* Floating UI toggle (mobile) - Mobile-first design */
+/* Mobile controls - FAB and info toggle */
 .fab {
   position: fixed;
-  z-index: 4;
-  display: inline-flex; /* Always visible on mobile */
+  z-index: 1001;
   width: 48px;
   height: 48px;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(8,12,20,.8);
+  background: rgba(8,12,20,.9);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #e6e9ef;
-  border: 1px solid rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.2);
   box-shadow: 0 8px 24px rgba(0,0,0,.4);
   cursor: pointer;
   font-size: 18px;
@@ -352,21 +395,26 @@ select {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   
-  /* Mobile-first: top-right position */
-  top: calc(16px + env(safe-area-inset-top));
-  right: calc(16px + env(safe-area-inset-right));
+  /* Mobile: positioned to avoid overlap with slide menu */
+  top: calc(20px + env(safe-area-inset-top));
+  right: calc(20px + env(safe-area-inset-right));
+  display: flex;
+}
+
+/* When UI is visible (slide menu open), move FAB to avoid overlap */
+.ui:not(.hidden) ~ .fab {
+  right: calc(340px + 20px + env(safe-area-inset-right)); /* UI width + margin */
 }
 
 .fab:hover {
-  background: rgba(8,12,20,.9);
-  border-color: rgba(255,255,255,.25);
+  background: rgba(8,12,20,1);
+  border-color: rgba(255,255,255,.3);
   transform: scale(1.05);
-  box-shadow: 0 10px 28px rgba(0,0,0,.5);
+  box-shadow: 0 10px 28px rgba(0,0,0,.6);
 }
 
 .fab:active {
   transform: scale(0.95);
-  background: rgba(8,12,20,.95);
 }
 
 .fab:focus-visible { 
@@ -374,26 +422,73 @@ select {
   outline-offset: 2px; 
 }
 
-/* Hide FAB on desktop since UI is always visible */
+/* Info toggle button for mobile */
+.info-toggle {
+  position: fixed;
+  z-index: 1001;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(8,12,20,.8);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #e6e9ef;
+  border: 1px solid rgba(255,255,255,.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  
+  /* Mobile: bottom-left */
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: calc(20px + env(safe-area-inset-left));
+  display: flex;
+}
+
+.info-toggle:hover {
+  background: rgba(8,12,20,.9);
+  border-color: rgba(255,255,255,.25);
+  transform: scale(1.05);
+}
+
+.info-toggle:active {
+  transform: scale(0.95);
+}
+
+/* Hide mobile controls on desktop */
 @media (min-width: 768px) {
-  .fab { 
+  .fab,
+  .info-toggle { 
     display: none; 
   }
 }
 
-/* Hide FAB when UI is visible on mobile */
-.ui:not(.hidden) ~ .fab { 
-  display: none; 
-}
-
-/* Very small screens positioning */
+/* Very small screens */
 @media (max-width: 380px) {
   .fab {
-    top: calc(12px + env(safe-area-inset-top));
-    right: calc(12px + env(safe-area-inset-right));
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
     width: 44px;
     height: 44px;
     font-size: 16px;
+  }
+  
+  /* When UI is visible on small screens */
+  .ui:not(.hidden) ~ .fab {
+    right: calc(320px + 16px + env(safe-area-inset-right)); /* Smaller UI width + margin */
+  }
+  
+  .info-toggle {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    left: calc(16px + env(safe-area-inset-left));
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
   }
 }
 /* Accordion styles */
@@ -509,28 +604,31 @@ details.accordion .row {
 /* Landscape orientation optimization for mobile */
 @media (max-width: 767px) and (orientation: landscape) {
   .ui {
-    max-height: 60vh; /* More space in landscape */
-    left: calc(4px + env(safe-area-inset-left));
-    right: calc(4px + env(safe-area-inset-right));
-    bottom: calc(4px + env(safe-area-inset-bottom));
+    width: 280px; /* Narrower in landscape to save space */
+    padding: 16px 18px;
   }
   
-  @supports (height: 100dvh) {
-    .ui { max-height: 60dvh; }
+  .ui h1 {
+    font-size: 13px;
+    margin-bottom: 8px;
   }
   
   /* More compact accordions in landscape */
   details.accordion {
-    margin: 4px 0;
+    margin: 6px 0;
   }
   
   details.accordion > summary {
-    padding: 12px 14px;
-    min-height: 40px;
-    font-size: 13px;
+    padding: 10px 12px;
+    min-height: 36px;
+    font-size: 12px;
   }
   
   details.accordion .row {
-    padding: 0 12px 8px;
+    padding: 0 10px 8px;
+  }
+  
+  .row {
+    margin: 8px 0;
   }
 }

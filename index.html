@@ -264,9 +264,10 @@
     <aside class="info" id="infoPanel">
       <div class="info-title" id="infoTitle">Sun</div>
       <div class="info-body">
-        <div><b>Type:</b> G‑type main-sequence star</div>
-        <div><b>Distance from Sun:</b> —</div>
-        <div><b>Orbital period:</b> —</div>
+        <div><b>Type:</b> G-type main-sequence star</div>
+        <div><b>Mass:</b> 1.989 × 10³⁰ kg (333,000 Earth masses)</div>
+        <div><b>Age:</b> ~4.6 billion years</div>
+        <div><b>Surface temperature:</b> ~5,778 K (5,505°C)</div>
         <div class="hint">Tip: click a planet or use the Focus dropdown</div>
       </div>
     </aside>
@@ -277,7 +278,10 @@
   <!-- Load the modular app -->
   <script type="module" src="app.js"></script>
 
-  <!-- Mobile UI toggle (shown when controls are hidden) -->
+  <!-- Mobile UI toggle (shown on mobile) -->
   <button id="uiToggleFab" class="fab" aria-label="Show controls" title="Show controls">☰</button>
+  
+  <!-- Mobile info toggle (shown on mobile) -->
+  <button id="infoToggleFab" class="info-toggle" aria-label="Show info" title="Show info">ℹ️</button>
 </body>
 </html>

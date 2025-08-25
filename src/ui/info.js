@@ -33,8 +33,9 @@ export function setInfoFor(name, meta) {
   if (name === "Sun" || !meta) {
     if (body) body.innerHTML = `
       <div><b>Type:</b> G-type main-sequence star</div>
-      <div><b>Distance from Sun:</b> —</div>
-      <div><b>Orbital period:</b> —</div>
+      <div><b>Mass:</b> 1.989 × 10³⁰ kg (333,000 Earth masses)</div>
+      <div><b>Age:</b> ~4.6 billion years</div>
+      <div><b>Surface temperature:</b> ~5,778 K (5,505°C)</div>
       <div class="hint">Tip: click a planet or use the Focus dropdown</div>
     `;
   } else {
@@ -63,15 +64,15 @@ export function setGalaxyInfo(focusType) {
         <div><b>Mass:</b> ~4.1 million solar masses</div>
         <div><b>Distance from Sol:</b> ~26,000 light-years</div>
         <div><b>Discovery:</b> Radio source detected 1974, black hole confirmed 2002</div>
-        <div class="hint">The gravitational center of our galaxy</div>
+        <div class="hint">The gravitational anchor of our galaxy</div>
       `;
       break;
       
     case 'sun':
-      infoTitle.textContent = "Sol System";
+      infoTitle.textContent = "Sol System Location";
       if (body) body.innerHTML = `
         <div><b>Location:</b> Orion Arm (Local Spur)</div>
-        <div><b>Galactic coordinates:</b> ~26,000 ly from center</div>
+        <div><b>Distance from center:</b> ~26,000 light-years</div>
         <div><b>Orbital velocity:</b> ~220 km/s around galactic center</div>
         <div><b>Galactic year:</b> ~225-250 million Earth years</div>
         <div class="hint">Our home in the galaxy's suburbs</div>
@@ -80,12 +81,13 @@ export function setGalaxyInfo(focusType) {
       
     case 'wide':
     default:
-      infoTitle.textContent = "Milky Way Galaxy";
+      infoTitle.textContent = "Milky Way Galaxy Facts";
       if (body) body.innerHTML = `
         <div><b>Type:</b> Barred spiral galaxy (SBbc)</div>
         <div><b>Diameter:</b> ~100,000 light-years</div>
         <div><b>Stellar mass:</b> ~60 billion solar masses</div>
         <div><b>Total mass:</b> ~1.5 trillion solar masses (including dark matter)</div>
+        <div><b>Age:</b> ~13.6 billion years</div>
         <div class="hint">Our cosmic island home to 200-400 billion stars</div>
       `;
       break;
