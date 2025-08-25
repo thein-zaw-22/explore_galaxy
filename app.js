@@ -530,19 +530,52 @@ function setupEventHandlers() {
   const legendToggleFab = document.getElementById('legendToggleFab');
   const infoPanel = document.getElementById('infoPanel');
   const mobileLegendPanel = document.getElementById('mobileLegendPanel');
+
+  // Helpers to keep only one mobile panel visible at a time
+  const closeUI = () => {
+    const ui = document.getElementById('ui');
+    if (ui && !ui.classList.contains('hidden')) {
+      ui.classList.add('hidden');
+      if (uiToggleFab) {
+        uiToggleFab.innerHTML = '☰';
+        uiToggleFab.setAttribute('aria-label', 'Show controls');
+      }
+    }
+  };
+  const closeInfoPanel = () => {
+    if (infoPanel && infoPanel.classList.contains('visible')) {
+      infoPanel.classList.remove('visible');
+      if (infoToggleFab) {
+        infoToggleFab.innerHTML = 'ℹ️';
+        infoToggleFab.setAttribute('aria-label', 'Show info');
+      }
+    }
+  };
+  const closeLegendPanel = () => {
+    if (mobileLegendPanel && mobileLegendPanel.classList.contains('visible')) {
+      mobileLegendPanel.classList.remove('visible');
+      if (legendToggleFab) {
+        legendToggleFab.innerHTML = '📄';
+        legendToggleFab.setAttribute('aria-label', 'Show facts');
+      }
+    }
+  };
   
   if (uiToggleFab) {
     uiToggleFab.addEventListener('click', () => {
       const ui = document.getElementById('ui');
       if (ui) {
         ui.classList.toggle('hidden');
-        // Update FAB icon based on state
-        uiToggleFab.innerHTML = ui.classList.contains('hidden') ? '☰' : '✕';
-        uiToggleFab.setAttribute('aria-label', 
-          ui.classList.contains('hidden') ? 'Show controls' : 'Hide controls'
-        );
+        const hidden = ui.classList.contains('hidden');
+        uiToggleFab.innerHTML = hidden ? '☰' : '✕';
+        uiToggleFab.setAttribute('aria-label', hidden ? 'Show controls' : 'Hide controls');
+        if (!hidden) {
+          // If opening UI, hide other panels
+          closeInfoPanel();
+          closeLegendPanel();
+        }
       }
-      
+
       // On mobile, when showing UI, ensure accordions are in appropriate state
       if (isTouchDevice()) {
         const ui = document.getElementById('ui');
@@ -572,11 +605,13 @@ function setupEventHandlers() {
   if (infoToggleFab && infoPanel) {
     infoToggleFab.addEventListener('click', () => {
       infoPanel.classList.toggle('visible');
-      // Update button icon based on state
-      infoToggleFab.innerHTML = infoPanel.classList.contains('visible') ? '✕' : 'ℹ️';
-      infoToggleFab.setAttribute('aria-label', 
-        infoPanel.classList.contains('visible') ? 'Hide info' : 'Show info'
-      );
+      const visible = infoPanel.classList.contains('visible');
+      infoToggleFab.innerHTML = visible ? '✕' : 'ℹ️';
+      infoToggleFab.setAttribute('aria-label', visible ? 'Hide info' : 'Show info');
+      if (visible) {
+        closeUI();
+        closeLegendPanel();
+      }
     });
     
     // Add touch feedback
@@ -597,11 +632,13 @@ function setupEventHandlers() {
   if (legendToggleFab && mobileLegendPanel) {
     legendToggleFab.addEventListener('click', () => {
       mobileLegendPanel.classList.toggle('visible');
-      // Update button icon based on state
-      legendToggleFab.innerHTML = mobileLegendPanel.classList.contains('visible') ? '✕' : '📄';
-      legendToggleFab.setAttribute('aria-label', 
-        mobileLegendPanel.classList.contains('visible') ? 'Hide facts' : 'Show facts'
-      );
+      const visible = mobileLegendPanel.classList.contains('visible');
+      legendToggleFab.innerHTML = visible ? '✕' : '📄';
+      legendToggleFab.setAttribute('aria-label', visible ? 'Hide facts' : 'Show facts');
+      if (visible) {
+        closeUI();
+        closeInfoPanel();
+      }
     });
     
     // Add touch feedback
