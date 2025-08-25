@@ -311,17 +311,24 @@ function focusOn(name) {
   camFromPos.copy(camera.position);
   targetFrom.copy(controls.target);
 
+  // Bring the camera in closer on smaller touch screens to avoid overly zoomed-out views
+  const isMobile = window.innerWidth <= 800 || (isTouchDevice() && window.innerWidth <= 1024);
+  const distScale = isMobile ? 0.75 : 1;
+
   if (name === "Sun") {
     targetTo.set(0, 0, 0);
     // Frame based on current system size
-    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42)) * distScale;
     camToPos.set(0, r * 1.25, r * 3.1);
   } else {
     const mesh = findPlanetByName(name);
     if (mesh) {
       targetTo.copy(mesh.position);
-      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(6 + mesh.geometry.parameters.radius * 8);
-      camToPos.copy(mesh.position).add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6)).add(back);
+      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar((6 + mesh.geometry.parameters.radius * 8) * distScale);
+      camToPos
+        .copy(mesh.position)
+        .add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6 * distScale))
+        .add(back);
     }
   }
 }
