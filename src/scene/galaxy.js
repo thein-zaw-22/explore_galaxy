@@ -304,7 +304,7 @@ export function createGalaxy(scene) {
 
   // Create enhanced label function
   function makeLabel(text, scale = 0.1) {
-    const padding = 8, fontSize = 40;
+    const padding = 8, fontSize = 44;
     const c = document.createElement("canvas");
     const ctx = c.getContext("2d");
     ctx.font = `bold ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto`;
@@ -356,7 +356,8 @@ export function createGalaxy(scene) {
       alphaTest: 0.001
     });
     const spr = new THREE.Sprite(mat);
-    const unit = scale * 0.03;
+    // Larger base unit for galaxy labels to improve readability at wide framing
+    const unit = scale * 0.05;
     spr.userData.label = { w, h, unit };
     spr.scale.set(w * unit, h * unit, 1);
     spr.renderOrder = 999;

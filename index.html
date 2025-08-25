@@ -11,11 +11,11 @@
   <canvas id="scene"></canvas>
 
   <div class="ui" id="ui" data-mode="solar">
-    <h1>3D Space Viz <span class="pill" id="modePill">Solar System</span></h1>
+    <h1>3D Space Viz <span class="pill" id="modePill">Solar System</span> <span class="pill status hidden" id="tourStatusPill" aria-live="polite" role="status" title="Tour status"></span></h1>
 
     <div class="row mode-toggle">
-      <button id="btnSolar" class="active">Solar System</button>
-      <button id="btnGalaxy">Milky Way</button>
+      <button id="btnSolar" class="active" aria-pressed="true">Solar System</button>
+      <button id="btnGalaxy" aria-pressed="false">Milky Way</button>
       <span class="spacer"></span>
       <button id="btnHelp" title="Show keyboard shortcuts and tips">Help</button>
     </div>
@@ -81,8 +81,8 @@
     <!-- New: Label size slider (applies to both modes) -->
     <div class="row">
       <label for="labelScale">Label size</label>
-      <input type="range" id="labelScale" min="50" max="300" value="160" />
-      <span class="pill" id="labelScaleVal">160%</span>
+      <input type="range" id="labelScale" min="50" max="300" value="200" />
+      <span class="pill" id="labelScaleVal">200%</span>
     </div>
 
     <!-- Global: Reset Zoom button -->
@@ -291,12 +291,12 @@
   <script type="module" src="app.js"></script>
 
   <!-- Mobile UI toggle (shown on mobile) -->
-  <button id="uiToggleFab" class="fab" aria-label="Show controls" title="Show controls">☰</button>
+  <button id="uiToggleFab" class="fab" aria-label="Show controls" aria-controls="ui" aria-expanded="false" title="Show controls">☰</button>
   
   <!-- Mobile info toggle (shown on mobile) -->
-  <button id="infoToggleFab" class="info-toggle" aria-label="Show info" title="Show info">ℹ️</button>
+  <button id="infoToggleFab" class="info-toggle" aria-label="Show info" aria-controls="infoPanel" aria-expanded="false" title="Show info">ℹ️</button>
   
   <!-- Mobile legend toggle (shown on mobile) -->
-  <button id="legendToggleFab" class="legend-toggle" aria-label="Show facts" title="Show facts">📄</button>
+  <button id="legendToggleFab" class="legend-toggle" aria-label="Show facts" aria-controls="mobileLegendPanel" aria-expanded="false" title="Show facts">📄</button>
 </body>
 </html>

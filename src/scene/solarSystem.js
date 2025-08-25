@@ -39,7 +39,7 @@ export function createSolarSystem(scene) {
   planetsData.forEach((p) => {
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(p.radius, 32, 32),
-      new THREE.MeshStandardMaterial({ color: p.color, metalness: 0.1, roughness: 0.8 })
+      new THREE.MeshStandardMaterial({ color: p.color, metalness: 0.1, roughness: 0.8, emissive: 0x162033, emissiveIntensity: 0.22 })
     );
     mesh.userData = {
       dist: p.dist, periodDays: p.periodDays, name: p.name, theta: Math.random() * Math.PI * 2
@@ -121,7 +121,8 @@ function makeLabel(text, scale = 0.1) {
     alphaTest: 0.001
   });
   const spr = new THREE.Sprite(mat);
-  const unit = scale * 0.03;
+  // Slightly larger base unit so labels are more legible
+  const unit = scale * 0.05;
   spr.userData.label = { w, h, unit };
   spr.scale.set(w * unit, h * unit, 1);
   spr.renderOrder = 999;

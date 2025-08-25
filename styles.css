@@ -12,7 +12,8 @@ html, body {
   user-select: none;
   touch-action: manipulation;
 }
-#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; outline: none; touch-action: none; }
+/* Use percentage width to avoid 100vw overflow on mobile */
+#scene { position: fixed; inset: 0; width: 100%; height: 100vh; display: block; outline: none; touch-action: none; }
 /* Prefer dynamic viewport height on mobile to avoid URL bar jumps */
 @supports (height: 100dvh) {
   #scene { height: 100dvh; }
@@ -34,7 +35,8 @@ html, body {
   /* Mobile-first: slide-out menu from left */
   top: 0;
   left: 0;
-  width: 320px;
+  /* Ensure panel never exceeds viewport on small devices */
+  width: min(92vw, 320px);
   height: 100vh;
   height: 100dvh;
   border-radius: 0 16px 16px 0;
@@ -189,6 +191,17 @@ html, body {
 .pill {
   display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
   background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1);
+}
+
+/* Status pill variation */
+.pill.status {
+  background: linear-gradient(180deg, rgba(120,180,255,.25), rgba(120,180,255,.12));
+  border-color: rgba(120,180,255,.35);
+  color: #e8f1ff;
+}
+[data-mode="galaxy"] .pill.status {
+  background: linear-gradient(180deg, rgba(200,140,255,.25), rgba(200,140,255,.12));
+  border-color: rgba(200,140,255,.35);
 }
 select {
   background: rgba(255,255,255,.06);
@@ -370,7 +383,7 @@ select {
   .ui {
     /* Adjust padding for mobile slide menu */
     padding: 24px 20px 20px 20px;
-    width: 300px; /* Slightly narrower on small screens */
+    width: min(90vw, 300px); /* Slightly narrower and within viewport */
   }
   
   .mode-toggle { 

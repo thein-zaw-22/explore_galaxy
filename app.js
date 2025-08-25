@@ -23,6 +23,10 @@ let mode = "solar", focused = "Sun", playing = true, touring = false;
 let tourIndex = 0, tourTimer = 0, timeSpeed = 40;
 let galaxyAutoRotate = true, galaxyRotationSpeed = 0.005, starBrightness = 0.9, labelSizeMultiplier = 1.6;
 let camLerp = 0;
+let _lastTs = performance.now();
+let isInteracting = false;
+let _interactTimer = null;
+let _prevFollowDuringTour = null;
 const CAM_TIME = 0.9;
 let camFromPos = new THREE.Vector3(), camToPos = new THREE.Vector3();
 let targetFrom = new THREE.Vector3(), targetTo = new THREE.Vector3(0, 0, 0);
@@ -115,6 +119,8 @@ async function init() {
   scene = createScene();
   camera = createCamera();
   renderer = createRenderer();
+  // Make canvas focusable so we can restore key events after using form controls
+  try { renderer.domElement.setAttribute('tabindex', '-1'); } catch(_){}
   
   // Create scene elements
   const solarResult = createSolarSystem(scene);
@@ -155,6 +161,19 @@ async function init() {
 
   // Initialize mode
   setMode('solar');
+  // Respect reduced-motion user preference for defaults (if no saved settings)
+  try {
+    const prefersReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const hasSaved = !!localStorage.getItem('spaceviz.settings.v1');
+    if (prefersReduce && !hasSaved) {
+      // Soften animations and rotation defaults
+      galaxyAutoRotate = false;
+      const sw = document.getElementById('galaxyAutoRotate');
+      const lb = document.getElementById('galaxyAutoRotateLabel');
+      if (sw) sw.checked = false;
+      if (lb) lb.classList.remove('active');
+    }
+  } catch (_) {}
   // Apply any saved settings and possibly switch mode
   applySettingsFromStorage();
   setInfoFor("Sun");
@@ -167,14 +186,18 @@ async function init() {
   camFromPos.copy(camera.position);
   camToPos.copy(camera.position);
 
-  // Start animation loop
-  animate();
+  // Start animation loop with timestamp baseline
+  _lastTs = performance.now();
+  animate(_lastTs);
 }
 
-function animate() {
+function animate(ts) {
   requestAnimationFrame(animate);
   
-  const dt = 1/60;
+  // rAF timestamp-based delta time for smooth, device-independent motion
+  const now = (typeof ts === 'number') ? ts : performance.now();
+  let dt = Math.max(0.001, Math.min(0.05, (now - _lastTs) / 1000)); // clamp 1ms..50ms
+  _lastTs = now;
   
   if (playing) {
     planets.forEach(p => {
@@ -240,9 +263,12 @@ function animate() {
     }
   }
   
-  if (touring) {
-    tourTimer += dt;
-    if (tourTimer > 4) {
+  // Solar auto tour should only run in Solar mode
+  if (mode === 'solar' && touring) {
+    // Slightly slower cadence on mobile for readability
+    const tourInterval = (window.innerWidth <= 800 || isTouchDevice()) ? 7 : 5;
+    if (!isInteracting) tourTimer += dt;
+    if (tourTimer > tourInterval) {
       tourTimer = 0;
       tourIndex = (tourIndex + 1) % uiElements.tourOrder.length;
       focusOn(uiElements.tourOrder[tourIndex]);
@@ -250,8 +276,9 @@ function animate() {
   }
   // Galaxy auto tour
   if (mode === 'galaxy' && galaxyTouring) {
-    galaxyTourTimer += dt;
-    if (galaxyTourTimer > 4) {
+    const tourInterval = (window.innerWidth <= 800 || isTouchDevice()) ? 7 : 5;
+    if (!isInteracting) galaxyTourTimer += dt;
+    if (galaxyTourTimer > tourInterval) {
       galaxyTourTimer = 0;
       galaxyTourIdx = (galaxyTourIdx + 1) % galaxyTourSeq.length;
       const dest = galaxyTourSeq[galaxyTourIdx];
@@ -264,7 +291,31 @@ function animate() {
   }
   
   if (controls) controls.update();
-  updateAllLabelScales(camera, labelSizeMultiplier, labels, sunMilkyLabel, centerLabel, spiralArms);
+  // Mode-aware label scaling with stronger floor for galaxy arm labels on mobile
+  const vw = window.innerWidth || 1024;
+  const mobileLike = vw <= 800 || isTouchDevice();
+  updateAllLabelScales(
+    camera,
+    labelSizeMultiplier,
+    labels,
+    sunMilkyLabel,
+    centerLabel,
+    spiralArms,
+    {
+      // Solar tuning: larger base and headroom
+      solarBase: 380,
+      solarMin: 0.6,
+      solarMax: 4.0,
+      // Galaxy labels: substantially increased baseline and headroom for readability
+      galaxyBase: mobileLike ? 800 : 900,
+      galaxyMin: mobileLike ? 1.2 : 1.0,
+      galaxyMax: mobileLike ? 6.0 : 6.2,
+      // Arm labels: strong floor so they remain visible on phones
+      galaxyArmBase: mobileLike ? 900 : 1000,
+      galaxyArmMin: mobileLike ? 1.4 : 1.1,
+      galaxyArmMax: mobileLike ? 6.5 : 6.5
+    }
+  );
   renderer.render(scene, camera);
 }
 
@@ -313,7 +364,8 @@ function focusOn(name) {
 
   // Bring the camera in closer on smaller touch screens to avoid overly zoomed-out views
   const isMobile = window.innerWidth <= 800 || (isTouchDevice() && window.innerWidth <= 1024);
-  const distScale = isMobile ? 0.75 : 1;
+  // Bring camera slightly closer on mobile to improve readability during auto tour
+  const distScale = isMobile ? 0.6 : 1;
 
   if (name === "Sun") {
     targetTo.set(0, 0, 0);
@@ -324,11 +376,18 @@ function focusOn(name) {
     const mesh = findPlanetByName(name);
     if (mesh) {
       targetTo.copy(mesh.position);
-      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar((6 + mesh.geometry.parameters.radius * 8) * distScale);
-      camToPos
-        .copy(mesh.position)
-        .add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6 * distScale))
-        .add(back);
+      const rPlanet = mesh.geometry?.parameters?.radius || 0.5;
+      // Dynamic distance: larger planets a bit farther; ensure Saturn's rings have extra clearance.
+      let backLen = 8 + rPlanet * 12;
+      if (name === 'Saturn') backLen += rPlanet * 6; // ring margin
+      backLen = THREE.MathUtils.clamp(backLen, 7, 60) * distScale;
+      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(backLen);
+
+      // Lateral/up offset scales slightly with planet size for better framing
+      const lateral = THREE.MathUtils.clamp(6 + rPlanet * 2.5, 5, 20) * distScale;
+      const lateralVec = new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(lateral);
+
+      camToPos.copy(mesh.position).add(lateralVec).add(back);
     }
   }
 }
@@ -336,6 +395,40 @@ function focusOn(name) {
 function setMode(next) {
   mode = next;
   const solar = mode === "solar";
+  // Stop the other mode's auto tour to avoid cross-effects
+  if (solar) {
+    if (galaxyTouring) {
+      galaxyTouring = false;
+      galaxyTourTimer = 0;
+      galaxyTourIdx = 0;
+      const btnGalaxyTour = document.getElementById('btnGalaxyTour');
+      if (btnGalaxyTour) {
+        btnGalaxyTour.textContent = 'Auto tour (Galaxy)';
+        btnGalaxyTour.setAttribute('aria-pressed', 'false');
+        btnGalaxyTour.setAttribute('aria-label', 'Start Galaxy auto tour');
+      }
+    }
+  } else {
+    if (touring) {
+      touring = false;
+      tourTimer = 0;
+      tourIndex = 0;
+      const btnTour = document.getElementById('btnTour');
+      if (btnTour) {
+        btnTour.textContent = 'Auto tour';
+        btnTour.setAttribute('aria-pressed', 'false');
+        btnTour.setAttribute('aria-label', 'Start Solar auto tour');
+      }
+      // Restore follow-selection if we changed it at tour start
+      const followSel = document.getElementById('followSelection');
+      const followLbl = document.getElementById('followSelectionLabel');
+      if (followSel != null && _prevFollowDuringTour != null) {
+        followSel.checked = _prevFollowDuringTour;
+        if (followLbl) followLbl.classList.toggle('active', !!_prevFollowDuringTour);
+        _prevFollowDuringTour = null;
+      }
+    }
+  }
   
   if (solarGroup) solarGroup.visible = solar;
   if (galaxyGroup) galaxyGroup.visible = !solar;
@@ -348,7 +441,11 @@ function setMode(next) {
   if (modePill) modePill.textContent = solar ? "Solar System" : "Milky Way";
   if (btnSolar) btnSolar.classList.toggle("active", solar);
   if (btnGalaxy) btnGalaxy.classList.toggle("active", !solar);
+  if (btnSolar) btnSolar.setAttribute('aria-pressed', String(!!solar));
+  if (btnGalaxy) btnGalaxy.setAttribute('aria-pressed', String(!solar));
   if (uiRoot) uiRoot.setAttribute('data-mode', solar ? 'solar' : 'galaxy');
+  // Re-apply accordion defaults when switching modes
+  try { applyAccordionDefaults(); } catch(_){}
 
   if (solar) {
     camera.near = 0.1; camera.far = 3000; camera.updateProjectionMatrix();
@@ -371,6 +468,13 @@ function setMode(next) {
     // Reset galaxy focus dropdown to 'wide'
     const galaxyFocus = document.getElementById('galaxyFocus');
     if (galaxyFocus) galaxyFocus.value = 'wide';
+  }
+  // Update tour status pill on mode change
+  const tourPill = document.getElementById('tourStatusPill');
+  if (tourPill) {
+    if (solar && touring) { tourPill.textContent = 'Solar tour'; tourPill.classList.remove('hidden'); }
+    else if (!solar && galaxyTouring) { tourPill.textContent = 'Galaxy tour'; tourPill.classList.remove('hidden'); }
+    else { tourPill.textContent = ''; tourPill.classList.add('hidden'); }
   }
   saveSettings();
 }
@@ -576,6 +680,7 @@ function setupEventHandlers() {
         const hidden = ui.classList.contains('hidden');
         uiToggleFab.innerHTML = hidden ? '☰' : '✕';
         uiToggleFab.setAttribute('aria-label', hidden ? 'Show controls' : 'Hide controls');
+        uiToggleFab.setAttribute('aria-expanded', String(!hidden));
         if (!hidden) {
           // If opening UI, hide other panels
           closeInfoPanel();
@@ -615,6 +720,7 @@ function setupEventHandlers() {
       const visible = infoPanel.classList.contains('visible');
       infoToggleFab.innerHTML = visible ? '✕' : 'ℹ️';
       infoToggleFab.setAttribute('aria-label', visible ? 'Hide info' : 'Show info');
+      infoToggleFab.setAttribute('aria-expanded', String(!!visible));
       if (visible) {
         closeUI();
         closeLegendPanel();
@@ -642,6 +748,7 @@ function setupEventHandlers() {
       const visible = mobileLegendPanel.classList.contains('visible');
       legendToggleFab.innerHTML = visible ? '✕' : '📄';
       legendToggleFab.setAttribute('aria-label', visible ? 'Hide facts' : 'Show facts');
+      legendToggleFab.setAttribute('aria-expanded', String(!!visible));
       if (visible) {
         closeUI();
         closeInfoPanel();
@@ -741,6 +848,7 @@ function setupEventHandlers() {
       labels.forEach((l) => (l.visible = vis));
       if (sunMilkyLabel) sunMilkyLabel.visible = vis;
       if (centerLabel) centerLabel.visible = vis;
+      if (spiralArms && spiralArms.length) spiralArms.forEach(s => s.visible = vis);
       const lab = document.getElementById('showLabelsLabel');
       if (lab) lab.classList.toggle('active', vis);
       saveSettings();
@@ -832,6 +940,10 @@ function setupEventHandlers() {
     focusSelect.addEventListener("change", () => {
       focusOn(focusSelect.value);
       saveSettings();
+      // Blur the select so keyboard shortcuts work immediately after
+      try { focusSelect.blur(); } catch(_){}
+      // Restore focus to canvas (no visual outline)
+      try { renderer && renderer.domElement && renderer.domElement.focus({ preventScroll: true }); } catch(_){}
     });
   }
   // Lock camera switch
@@ -853,8 +965,35 @@ function setupEventHandlers() {
       tourIndex = 0;
       tourTimer = 0;
       btnTour.textContent = touring ? "Stop tour" : "Auto tour";
+      btnTour.setAttribute('aria-pressed', String(!!touring));
+      btnTour.setAttribute('aria-label', touring ? 'Stop Solar auto tour' : 'Start Solar auto tour');
       if (touring && tourOrder && tourOrder.length > 0) {
         focusOn(tourOrder[tourIndex]);
+        // On touch devices, enable camera follow for steadier mobile viewing
+        if (isTouchDevice()) {
+          const followSel = document.getElementById('followSelection');
+          const followLbl = document.getElementById('followSelectionLabel');
+          if (followSel) {
+            _prevFollowDuringTour = followSel.checked;
+            followSel.checked = true;
+          }
+          if (followLbl) followLbl.classList.add('active');
+        }
+      }
+      // Update status pill and restore follow-selection on stop
+      const pill = document.getElementById('tourStatusPill');
+      if (pill) {
+        pill.textContent = touring ? 'Solar tour' : '';
+        pill.classList.toggle('hidden', !touring);
+      }
+      if (!touring) {
+        const followSel = document.getElementById('followSelection');
+        const followLbl = document.getElementById('followSelectionLabel');
+        if (followSel != null && _prevFollowDuringTour != null) {
+          followSel.checked = _prevFollowDuringTour;
+          if (followLbl) followLbl.classList.toggle('active', !!_prevFollowDuringTour);
+          _prevFollowDuringTour = null;
+        }
       }
       saveSettings();
     });
@@ -875,6 +1014,9 @@ function setupEventHandlers() {
         setGalaxyInfo('wide');
       }
       saveSettings();
+      // Blur dropdown and return focus to canvas for shortcuts
+      try { galaxyFocus.blur(); } catch(_){}
+      try { renderer && renderer.domElement && renderer.domElement.focus({ preventScroll: true }); } catch(_){}
     });
   }
 
@@ -1162,6 +1304,8 @@ function setupEventHandlers() {
       galaxyTourTimer = 0;
       galaxyTourIdx = 0;
       btnGalaxyTour.textContent = galaxyTouring ? 'Stop tour' : 'Auto tour (Galaxy)';
+      btnGalaxyTour.setAttribute('aria-pressed', String(!!galaxyTouring));
+      btnGalaxyTour.setAttribute('aria-label', galaxyTouring ? 'Stop Galaxy auto tour' : 'Start Galaxy auto tour');
       if (galaxyTouring) {
         const dest = galaxyTourSeq[galaxyTourIdx];
         const galaxyFocus = document.getElementById('galaxyFocus');
@@ -1169,6 +1313,12 @@ function setupEventHandlers() {
         if (dest === 'core') { focusGalaxyCenter(); setGalaxyInfo('core'); }
         if (dest === 'sun') { focusGalaxySun(); setGalaxyInfo('sun'); }
         if (dest === 'wide') { resetGalaxyView(); setGalaxyInfo('wide'); }
+      }
+      // Update status pill
+      const pill = document.getElementById('tourStatusPill');
+      if (pill) {
+        pill.textContent = galaxyTouring ? 'Galaxy tour' : '';
+        pill.classList.toggle('hidden', !galaxyTouring);
       }
       saveSettings();
     });
@@ -1178,7 +1328,7 @@ function setupEventHandlers() {
   if (labelScaleEl) {
     const applyLabelScale = () => {
       const pct = parseInt(labelScaleEl.value, 10);
-      labelSizeMultiplier = THREE.MathUtils.clamp(pct / 100, 0.5, 3.0);
+      labelSizeMultiplier = THREE.MathUtils.clamp(pct / 100, 0.5, 5.0);
       if (labelScaleVal) labelScaleVal.textContent = `${pct}%`;
     };
     
@@ -1246,7 +1396,20 @@ function setupEventHandlers() {
   };
   
   if (renderer && renderer.domElement) {
-    renderer.domElement.addEventListener("pointerdown", pointerDownHandler);
+    const cv = renderer.domElement;
+    cv.addEventListener("pointerdown", (e) => {
+      isInteracting = true;
+      if (_interactTimer) { clearTimeout(_interactTimer); _interactTimer = null; }
+    });
+    const clearInteractSoon = () => {
+      if (_interactTimer) clearTimeout(_interactTimer);
+      _interactTimer = setTimeout(() => { isInteracting = false; }, 250);
+    };
+    cv.addEventListener("pointerup", clearInteractSoon);
+    cv.addEventListener("pointercancel", clearInteractSoon);
+    cv.addEventListener("pointerleave", clearInteractSoon);
+    cv.addEventListener("wheel", () => { isInteracting = true; clearInteractSoon(); }, { passive: true });
+    cv.addEventListener("pointerdown", pointerDownHandler);
   }
 
   // (Screenshot feature removed)
@@ -1341,13 +1504,11 @@ function setupAccordions() {
 
 function applyAccordionDefaults() {
   if (!_accordionInitialized) return;
-  // Improved mobile detection: consider both width and touch capability
-  const isMobile = window.innerWidth <= 800 || ('ontouchstart' in window && window.innerWidth <= 1024);
-  const shouldOpen = !isMobile;
   const acc = Array.from(document.querySelectorAll('details.accordion'));
   acc.forEach(d => {
     if (d.dataset.userSet === '1') return;
-    d.open = shouldOpen;
+    // Close by default across modes; do not override if user has interacted
+    d.open = false;
   });
 }
 
