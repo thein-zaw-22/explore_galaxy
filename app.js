@@ -311,17 +311,23 @@ function focusOn(name) {
   camFromPos.copy(camera.position);
   targetFrom.copy(controls.target);
 
+  // Bring the camera in closer on small/touch screens to avoid overly zoomed-out views
+  const distScale = getCamDistScale();
+
   if (name === "Sun") {
     targetTo.set(0, 0, 0);
     // Frame based on current system size
-    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
+    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42)) * distScale;
     camToPos.set(0, r * 1.25, r * 3.1);
   } else {
     const mesh = findPlanetByName(name);
     if (mesh) {
       targetTo.copy(mesh.position);
-      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar(6 + mesh.geometry.parameters.radius * 8);
-      camToPos.copy(mesh.position).add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6)).add(back);
+      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar((6 + mesh.geometry.parameters.radius * 8) * distScale);
+      camToPos
+        .copy(mesh.position)
+        .add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6 * distScale))
+        .add(back);
     }
   }
 }
@@ -381,7 +387,8 @@ function resetSolarView() {
 }
 
 function resetGalaxyView() {
-  camera.position.set(0, 120, 280);
+  const distScale = getCamDistScale();
+  camera.position.set(0, 120 * distScale, 280 * distScale);
   controls.target.set(0, 0, 0);
   controls.update();
 }
@@ -390,24 +397,26 @@ function focusGalaxyCenter() {
   camLerp = 0;
   camFromPos.copy(camera.position);
   targetFrom.copy(controls.target);
+  const distScale = getCamDistScale();
   targetTo.set(0, 0, 0);
   // Position camera to get a good view of the galactic core
-  camToPos.set(0, 45, 120);
+  camToPos.set(0, 45 * distScale, 120 * distScale);
 }
 
 function focusGalaxySun() {
   camLerp = 0;
   camFromPos.copy(camera.position);
   targetFrom.copy(controls.target);
-  
+  const distScale = getCamDistScale();
+
   if (sunMilky) {
     // Focus directly on the Sun's position
     targetTo.copy(sunMilky.position);
     // Adaptive view distance based on Sun's galactic radius for consistent framing
     const sunPos = sunMilky.position.clone();
     const sunRadius = Math.sqrt(sunPos.x*sunPos.x + sunPos.z*sunPos.z) || 80;
-    const offsetDistance = THREE.MathUtils.clamp(sunRadius * 0.35, 20, 40);
-    const heightOffset = THREE.MathUtils.clamp(sunRadius * 0.16, 12, 22);
+    const offsetDistance = THREE.MathUtils.clamp(sunRadius * 0.35, 20, 40) * distScale;
+    const heightOffset = THREE.MathUtils.clamp(sunRadius * 0.16, 12, 22) * distScale;
     camToPos.set(sunPos.x + offsetDistance * 0.7, sunPos.y + heightOffset, sunPos.z + offsetDistance * 0.7);
   } else {
     focusGalaxyCenter();
@@ -423,8 +432,9 @@ function focusGalaxyAt(pos) {
   const dir = new THREE.Vector3(pos.x, 0, pos.z);
   if (dir.lengthSq() === 0) dir.set(1,0,0);
   dir.normalize();
-  const offsetDistance = 38;
-  const heightOffset = 18;
+  const distScale = getCamDistScale();
+  const offsetDistance = 38 * distScale;
+  const heightOffset = 18 * distScale;
   camToPos.set(pos.x + dir.x * offsetDistance, pos.y + heightOffset, pos.z + dir.z * offsetDistance);
 }
 
@@ -448,7 +458,7 @@ function setupEventHandlers() {
       const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42));
       dist = Math.max(100, r * 3.2);
     } else {
-      dist = 300; // about the default galaxy framing distance
+      dist = 300 * getCamDistScale(); // scale default galaxy framing distance
     }
     camera.position.copy(target).add(dir.multiplyScalar(dist));
     camLerp = 1; // avoid interpolation overriding this
@@ -530,19 +540,52 @@ function setupEventHandlers() {
   const legendToggleFab = document.getElementById('legendToggleFab');
   const infoPanel = document.getElementById('infoPanel');
   const mobileLegendPanel = document.getElementById('mobileLegendPanel');
+
+  // Helpers to keep only one mobile panel visible at a time
+  const closeUI = () => {
+    const ui = document.getElementById('ui');
+    if (ui && !ui.classList.contains('hidden')) {
+      ui.classList.add('hidden');
+      if (uiToggleFab) {
+        uiToggleFab.innerHTML = '☰';
+        uiToggleFab.setAttribute('aria-label', 'Show controls');
+      }
+    }
+  };
+  const closeInfoPanel = () => {
+    if (infoPanel && infoPanel.classList.contains('visible')) {
+      infoPanel.classList.remove('visible');
+      if (infoToggleFab) {
+        infoToggleFab.innerHTML = 'ℹ️';
+        infoToggleFab.setAttribute('aria-label', 'Show info');
+      }
+    }
+  };
+  const closeLegendPanel = () => {
+    if (mobileLegendPanel && mobileLegendPanel.classList.contains('visible')) {
+      mobileLegendPanel.classList.remove('visible');
+      if (legendToggleFab) {
+        legendToggleFab.innerHTML = '📄';
+        legendToggleFab.setAttribute('aria-label', 'Show facts');
+      }
+    }
+  };
   
   if (uiToggleFab) {
     uiToggleFab.addEventListener('click', () => {
       const ui = document.getElementById('ui');
       if (ui) {
         ui.classList.toggle('hidden');
-        // Update FAB icon based on state
-        uiToggleFab.innerHTML = ui.classList.contains('hidden') ? '☰' : '✕';
-        uiToggleFab.setAttribute('aria-label', 
-          ui.classList.contains('hidden') ? 'Show controls' : 'Hide controls'
-        );
+        const hidden = ui.classList.contains('hidden');
+        uiToggleFab.innerHTML = hidden ? '☰' : '✕';
+        uiToggleFab.setAttribute('aria-label', hidden ? 'Show controls' : 'Hide controls');
+        if (!hidden) {
+          // If opening UI, hide other panels
+          closeInfoPanel();
+          closeLegendPanel();
+        }
       }
-      
+
       // On mobile, when showing UI, ensure accordions are in appropriate state
       if (isTouchDevice()) {
         const ui = document.getElementById('ui');
@@ -572,11 +615,13 @@ function setupEventHandlers() {
   if (infoToggleFab && infoPanel) {
     infoToggleFab.addEventListener('click', () => {
       infoPanel.classList.toggle('visible');
-      // Update button icon based on state
-      infoToggleFab.innerHTML = infoPanel.classList.contains('visible') ? '✕' : 'ℹ️';
-      infoToggleFab.setAttribute('aria-label', 
-        infoPanel.classList.contains('visible') ? 'Hide info' : 'Show info'
-      );
+      const visible = infoPanel.classList.contains('visible');
+      infoToggleFab.innerHTML = visible ? '✕' : 'ℹ️';
+      infoToggleFab.setAttribute('aria-label', visible ? 'Hide info' : 'Show info');
+      if (visible) {
+        closeUI();
+        closeLegendPanel();
+      }
     });
     
     // Add touch feedback
@@ -597,11 +642,13 @@ function setupEventHandlers() {
   if (legendToggleFab && mobileLegendPanel) {
     legendToggleFab.addEventListener('click', () => {
       mobileLegendPanel.classList.toggle('visible');
-      // Update button icon based on state
-      legendToggleFab.innerHTML = mobileLegendPanel.classList.contains('visible') ? '✕' : '📄';
-      legendToggleFab.setAttribute('aria-label', 
-        mobileLegendPanel.classList.contains('visible') ? 'Hide facts' : 'Show facts'
-      );
+      const visible = mobileLegendPanel.classList.contains('visible');
+      legendToggleFab.innerHTML = visible ? '✕' : '📄';
+      legendToggleFab.setAttribute('aria-label', visible ? 'Hide facts' : 'Show facts');
+      if (visible) {
+        closeUI();
+        closeInfoPanel();
+      }
     });
     
     // Add touch feedback
@@ -1310,4 +1357,9 @@ function applyAccordionDefaults() {
 // Helper function to detect if device is actually mobile/touch
 function isTouchDevice() {
   return 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+}
+
+function getCamDistScale() {
+  const narrow = window.innerWidth <= 800 || (isTouchDevice() && window.innerWidth <= 1024);
+  return narrow ? Math.max(0.5, window.innerWidth / 800) : 1;
 }

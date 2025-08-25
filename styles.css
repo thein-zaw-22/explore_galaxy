@@ -99,6 +99,7 @@ html, body {
   flex:1; padding:6px 10px; font-size:12px; color:#dce1ea;
   background:transparent; border:none; border-radius:8px; cursor:pointer;
   white-space: nowrap; /* prevent wrapping like "Solar System" */
+  display:flex; align-items:center; justify-content:center; text-align:center;
 }
 /* Let Help button size to content and stay to the right */
 .mode-toggle #btnHelp { flex: 0 0 auto; padding-inline: 10px; }
@@ -257,13 +258,14 @@ select {
   font-size: 12px;
   line-height: 1.45;
   transition: all 0.3s ease;
-  
-  /* Mobile: bottom-right, compact */
+
+  /* Mobile: bottom-left, compact */
   bottom: calc(20px + env(safe-area-inset-bottom));
-  right: calc(20px + env(safe-area-inset-right));
+  left: calc(20px + env(safe-area-inset-left));
+  right: auto;
   max-width: calc(100vw - 40px);
   width: 280px;
-  
+
   /* Hide by default on mobile to avoid overlap */
   opacity: 0;
   transform: translateY(20px);
