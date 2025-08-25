@@ -5,7 +5,7 @@ An interactive Three.js experience to explore a stylized Solar System and a Milk
 ### Features
 - Solar System mode: planets, orbits, labels, auto tour, time speed.
 - Milky Way mode: spiral arms point cloud, glowing galactic core, Sun location marker.
-- Camera: rotate/pan/zoom with damping (uses OrbitControls when available, falls back to built‑in BasicOrbitControls if CDN fails).
+- Camera: rotate/pan/zoom with damping using a built‑in BasicOrbitControls.
 - UI controls: mode switch, focus presets, auto‑rotate, galaxy spin speed, star brightness, label visibility and size.
 
 ### Run locally
@@ -48,8 +48,8 @@ lsof -i :8000 | awk 'NR>1 {print $2}' | xargs kill -9
 - Reset View: reframe the current mode.
 
 ### CDN notes / offline behavior
-- The page attempts to load Three.js and OrbitControls from public CDNs (unpkg then jsDelivr). If OrbitControls fails, the app automatically switches to a built‑in `BasicOrbitControls` so interaction still works.
-- If you’re fully offline, ensure `three.min.js` is locally available or pre‑cached; otherwise the page cannot initialize. To hard‑pin local assets, drop `three.min.js` and `OrbitControls.js` into the project and update `index.html` to reference them directly.
+- The page loads Three.js from unpkg. Controls are provided by a built‑in `BasicOrbitControls` (no external dependency).
+- If you’re offline, place a local `three.min.js` in the project and update `index.html` to reference it instead of the CDN.
 
 ### File structure
 - `index.html`: UI, dependency loader, and mounting canvas
@@ -58,9 +58,8 @@ lsof -i :8000 | awk 'NR>1 {print $2}' | xargs kill -9
 
 ### Known limitations
 - Scales and distances are stylized for clarity; not to astrophysical scale.
-- Galaxy is a simplified point‑cloud approximation.
+- Milky Way is a simplified, stylized point‑cloud approximation with uniform group rotation (not a physical simulation of galactic dynamics).
 
 ### License
 Educational/demo use. Three.js is © its respective authors and licensed under MIT.
-
 

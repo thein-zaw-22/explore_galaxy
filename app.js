@@ -90,7 +90,8 @@ function applySettingsFromStorage() {
     setVal('bulgeOpacity', s.bulgeOpacity); setVal('haloOpacity', s.haloOpacity);
     setVal('coreGlow', s.coreGlow); setVal('fogDensity', s.fogDensity);
     if (s.mode === 'galaxy') setMode('galaxy');
-    if (s.galaxyFocus) { const gf = document.getElementById('galaxyFocus'); if (gf) gf.value = s.galaxyFocus; }
+    // Ensure focus change applies handlers (camera+info) by dispatching events
+    if (s.galaxyFocus) { setVal('galaxyFocus', s.galaxyFocus); }
   } catch(_){}
 }
 
@@ -390,6 +391,20 @@ function focusGalaxySun() {
   }
 }
 
+// Generic focus helper for arbitrary galaxy positions (e.g., arm labels)
+function focusGalaxyAt(pos) {
+  camLerp = 0;
+  camFromPos.copy(camera.position);
+  targetFrom.copy(controls.target);
+  targetTo.copy(pos);
+  const dir = new THREE.Vector3(pos.x, 0, pos.z);
+  if (dir.lengthSq() === 0) dir.set(1,0,0);
+  dir.normalize();
+  const offsetDistance = 38;
+  const heightOffset = 18;
+  camToPos.set(pos.x + dir.x * offsetDistance, pos.y + heightOffset, pos.z + dir.z * offsetDistance);
+}
+
 function setupEventHandlers() {
   const {
     elSpeed, elSpeedVal, elShowOrbits, elShowLabels, btnSolar, btnGalaxy,
@@ -474,17 +489,47 @@ function setupEventHandlers() {
     }
   });
 
-  // Help button and close handling
+  // Help overlay accessibility: focus trap + return focus
   const helpBtn = document.getElementById('btnHelp');
   const helpOverlay = document.getElementById('helpOverlay');
   const closeHelpBtn = document.getElementById('btnCloseHelp');
-  helpBtn && helpBtn.addEventListener('click', () => helpOverlay && helpOverlay.classList.add('active'));
-  closeHelpBtn && closeHelpBtn.addEventListener('click', () => helpOverlay && helpOverlay.classList.remove('active'));
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && helpOverlay && helpOverlay.classList.contains('active')) {
-      helpOverlay.classList.remove('active');
+  let helpReturnFocusEl = null;
+  const focusableSel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const trapFocus = (evt) => {
+    if (!helpOverlay || !helpOverlay.classList.contains('active')) return;
+    if (evt.key !== 'Tab') return;
+    const nodes = Array.from(helpOverlay.querySelectorAll(focusableSel)).filter(el => !el.hasAttribute('disabled'));
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (evt.shiftKey) {
+      if (document.activeElement === first) { last.focus(); evt.preventDefault(); }
+    } else {
+      if (document.activeElement === last) { first.focus(); evt.preventDefault(); }
     }
-  });
+  };
+  if (helpBtn && helpOverlay) {
+    helpBtn.addEventListener('click', () => {
+      helpReturnFocusEl = document.activeElement || helpBtn;
+      helpOverlay.classList.add('active');
+      (closeHelpBtn || helpOverlay).focus({ preventScroll: true });
+      window.addEventListener('keydown', trapFocus);
+    });
+  }
+  if (closeHelpBtn && helpOverlay) {
+    const closeOverlay = () => {
+      helpOverlay.classList.remove('active');
+      window.removeEventListener('keydown', trapFocus);
+      if (helpReturnFocusEl && typeof helpReturnFocusEl.focus === 'function') {
+        helpReturnFocusEl.focus({ preventScroll: true });
+      }
+    };
+    closeHelpBtn.addEventListener('click', closeOverlay);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && helpOverlay.classList.contains('active')) closeOverlay();
+    });
+  }
+  // (help overlay base handlers replaced by accessibility version above)
   
   // Speed control
   if (elSpeed) {
@@ -944,7 +989,7 @@ function setupEventHandlers() {
 
       // Galaxy interactions: click Sun marker or Core
       if (mode === 'galaxy') {
-        const galaxyTargets = [sunMilky, accretionDisk, bulge].filter(Boolean);
+        const galaxyTargets = [sunMilky, accretionDisk, bulge, ...(spiralArms || [])].filter(Boolean);
         if (galaxyTargets.length) {
           const ghits = raycaster.intersectObjects(galaxyTargets, false);
           if (ghits.length > 0) {
@@ -953,6 +998,12 @@ function setupEventHandlers() {
               if (galaxyFocus) galaxyFocus.value = 'sun';
               focusGalaxySun();
               setGalaxyInfo('sun');
+            } else if (obj.userData && obj.userData.isArmLabel) {
+              // Focus near the clicked arm label
+              focusGalaxyAt(obj.position);
+              setGalaxyInfo('wide');
+              const sel = document.getElementById('galaxyFocus');
+              if (sel) sel.value = 'wide';
             } else {
               if (galaxyFocus) galaxyFocus.value = 'core';
               focusGalaxyCenter();

@@ -355,6 +355,8 @@ export function createGalaxy(scene) {
     
     const armLabel = makeLabel(name, 0.08);
     armLabel.position.set(labelX, 4, labelZ);
+    armLabel.userData.isArmLabel = true;
+    armLabel.userData.armName = name;
     galaxyGroup.add(armLabel);
     spiralArms.push(armLabel);
   });
