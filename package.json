@@ -1,0 +1,8 @@
+{
+  "name": "explore_galaxy",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "echo 'No tests defined'"
+  }
+}
