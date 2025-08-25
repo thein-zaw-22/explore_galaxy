@@ -10,6 +10,7 @@ import { createGalaxy, updateDynamics, setDynamicsEnabled, setDynamicsParams } f
 import { getUIElements } from './src/ui/elements.js';
 import { setInfoFor, setGalaxyInfo, updateLegend } from './src/ui/info.js';
 import { updateAllLabelScales } from './src/ui/labels.js';
+import { initFocus, focusOn, focusGalaxyCenter, focusGalaxySun, focusGalaxyAt, getCamDistScale, isTouchDevice, focusState, CAM_TIME } from './src/ui/focus.js';
 
 // Global app state
 let scene, camera, renderer, controls;
@@ -19,13 +20,9 @@ let solarMaxDist = 0;
 let sunMilky, sunMilkyLabel, centerLabel, accretionDisk, bulge;
 let armsPoints, bulgePoints, haloPoints, coreGlowSprites = [];
 let spiralArms = [], starFormationRegions = [], dustLanes = null;
-let mode = "solar", focused = "Sun", playing = true, touring = false;
+let mode = "solar", playing = true, touring = false;
 let tourIndex = 0, tourTimer = 0, timeSpeed = 40;
 let galaxyAutoRotate = true, galaxyRotationSpeed = 0.005, starBrightness = 0.9, labelSizeMultiplier = 1.6;
-let camLerp = 0;
-const CAM_TIME = 0.9;
-let camFromPos = new THREE.Vector3(), camToPos = new THREE.Vector3();
-let targetFrom = new THREE.Vector3(), targetTo = new THREE.Vector3(0, 0, 0);
 const mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
 let uiElements;
 let _accordionInitialized = false; // manage mobile accordions default state
@@ -149,6 +146,17 @@ async function init() {
   // Set up controls
   controls = new BasicOrbitControls(camera, renderer.domElement);
 
+  // Initialize focus helpers with scene data
+  initFocus({
+    camera,
+    controls,
+    orbitLines,
+    planetsData,
+    planets,
+    solarMaxDist,
+    sunMilky
+  });
+
   // UI setup
   uiElements = getUIElements();
   setupEventHandlers();
@@ -163,9 +171,9 @@ async function init() {
   setupAccordions();
   
   // Ensure camera animation is complete to prevent interference
-  camLerp = 1;
-  camFromPos.copy(camera.position);
-  camToPos.copy(camera.position);
+  focusState.camLerp = 1;
+  focusState.camFromPos.copy(camera.position);
+  focusState.camToPos.copy(camera.position);
 
   // Start animation loop
   animate();
@@ -207,19 +215,19 @@ function animate() {
     updateDynamics(dt);
   }
   
-  if (camLerp < 1) {
-    camLerp = Math.min(1, camLerp + dt / CAM_TIME);
-    const t = 1 - Math.pow(1 - camLerp, 3);
-    camera.position.lerpVectors(camFromPos, camToPos, t);
-    _tmpVec3.lerpVectors(targetFrom, targetTo, t);
+  if (focusState.camLerp < 1) {
+    focusState.camLerp = Math.min(1, focusState.camLerp + dt / CAM_TIME);
+    const t = 1 - Math.pow(1 - focusState.camLerp, 3);
+    camera.position.lerpVectors(focusState.camFromPos, focusState.camToPos, t);
+    _tmpVec3.lerpVectors(focusState.targetFrom, focusState.targetTo, t);
     controls.target.copy(_tmpVec3);
   }
   
   // Dynamic camera following when Lock camera is enabled
   const fs = uiElements && uiElements.followSelection;
-  if (fs && fs.checked && focused !== "Sun" && mode === "solar") {
-    const mesh = findPlanetByName(focused);
-    if (mesh && camLerp >= 1) { // Only follow after initial focus animation is complete
+  if (fs && fs.checked && focusState.focused !== "Sun" && mode === "solar") {
+    const mesh = findPlanetByName(focusState.focused);
+    if (mesh && focusState.camLerp >= 1) { // Only follow after initial focus animation is complete
       // Calculate optimal camera distance based on planet size and distance from sun
       const planetRadius = mesh.geometry.parameters.radius;
       const optimalDistance = Math.max(8, planetRadius * 12 + mesh.userData.dist * 0.15);
@@ -270,66 +278,6 @@ function animate() {
 
 function findPlanetByName(name) {
   return planets.find(p => p.userData && p.userData.name === name);
-}
-
-function focusOn(name) {
-  focused = name;
-  orbitLines.forEach((line, i) => {
-    const on = (planetsData[i].name === name);
-    line.material.opacity = on ? 0.95 : 0.25;
-    line.material.color.setHex(on ? 0xaad4ff : 0x355079);
-    line.material.needsUpdate = true;
-  });
-
-  const meta = planetsData.find(p => p.name === name);
-  setInfoFor(name, meta);
-
-  // Add a soft highlight halo around the focused planet
-  planets.forEach(p => {
-    const old = p.getObjectByName('focusHalo');
-    if (old) p.remove(old);
-  });
-  if (name !== 'Sun') {
-    const mesh = findPlanetByName(name);
-    if (mesh) {
-      const r = mesh.geometry?.parameters?.radius || 0.5;
-      const ringGeo = new THREE.RingGeometry(r * 1.35, r * 1.7, 48);
-      const c = document.createElement('canvas'); c.width = 128; c.height = 16;
-      const g = c.getContext('2d'); const grd = g.createLinearGradient(0,0,128,0);
-      grd.addColorStop(0,'rgba(120,180,255,0)'); grd.addColorStop(0.5,'rgba(120,180,255,0.7)'); grd.addColorStop(1,'rgba(120,180,255,0)');
-      g.fillStyle = grd; g.fillRect(0,0,128,16);
-      const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter; tex.premultiplyAlpha = true;
-      const ringMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite:false, opacity: 0.9, side: THREE.DoubleSide });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.name = 'focusHalo';
-      ring.rotation.x = Math.PI / 2;
-      mesh.add(ring);
-    }
-  }
-
-  camLerp = 0;
-  camFromPos.copy(camera.position);
-  targetFrom.copy(controls.target);
-
-  // Bring the camera in closer on small/touch screens to avoid overly zoomed-out views
-  const distScale = getCamDistScale();
-
-  if (name === "Sun") {
-    targetTo.set(0, 0, 0);
-    // Frame based on current system size
-    const r = Math.max(20, solarMaxDist || Math.max(...planetsData.map(p => p.dist), 42)) * distScale;
-    camToPos.set(0, r * 1.25, r * 3.1);
-  } else {
-    const mesh = findPlanetByName(name);
-    if (mesh) {
-      targetTo.copy(mesh.position);
-      const back = new THREE.Vector3().copy(mesh.position).normalize().multiplyScalar((6 + mesh.geometry.parameters.radius * 8) * distScale);
-      camToPos
-        .copy(mesh.position)
-        .add(new THREE.Vector3(0.6, 0.6, 0.6).multiplyScalar(6 * distScale))
-        .add(back);
-    }
-  }
 }
 
 function setMode(next) {
@@ -383,7 +331,7 @@ function resetSolarView() {
   controls.target.set(0, 0, 0);
   controls.update();
   // Ensure no animation overrides this position
-  camLerp = 1;
+  focusState.camLerp = 1;
 }
 
 function resetGalaxyView() {
@@ -391,51 +339,6 @@ function resetGalaxyView() {
   camera.position.set(0, 120 * distScale, 280 * distScale);
   controls.target.set(0, 0, 0);
   controls.update();
-}
-
-function focusGalaxyCenter() {
-  camLerp = 0;
-  camFromPos.copy(camera.position);
-  targetFrom.copy(controls.target);
-  const distScale = getCamDistScale();
-  targetTo.set(0, 0, 0);
-  // Position camera to get a good view of the galactic core
-  camToPos.set(0, 45 * distScale, 120 * distScale);
-}
-
-function focusGalaxySun() {
-  camLerp = 0;
-  camFromPos.copy(camera.position);
-  targetFrom.copy(controls.target);
-  const distScale = getCamDistScale();
-
-  if (sunMilky) {
-    // Focus directly on the Sun's position
-    targetTo.copy(sunMilky.position);
-    // Adaptive view distance based on Sun's galactic radius for consistent framing
-    const sunPos = sunMilky.position.clone();
-    const sunRadius = Math.sqrt(sunPos.x*sunPos.x + sunPos.z*sunPos.z) || 80;
-    const offsetDistance = THREE.MathUtils.clamp(sunRadius * 0.35, 20, 40) * distScale;
-    const heightOffset = THREE.MathUtils.clamp(sunRadius * 0.16, 12, 22) * distScale;
-    camToPos.set(sunPos.x + offsetDistance * 0.7, sunPos.y + heightOffset, sunPos.z + offsetDistance * 0.7);
-  } else {
-    focusGalaxyCenter();
-  }
-}
-
-// Generic focus helper for arbitrary galaxy positions (e.g., arm labels)
-function focusGalaxyAt(pos) {
-  camLerp = 0;
-  camFromPos.copy(camera.position);
-  targetFrom.copy(controls.target);
-  targetTo.copy(pos);
-  const dir = new THREE.Vector3(pos.x, 0, pos.z);
-  if (dir.lengthSq() === 0) dir.set(1,0,0);
-  dir.normalize();
-  const distScale = getCamDistScale();
-  const offsetDistance = 38 * distScale;
-  const heightOffset = 18 * distScale;
-  camToPos.set(pos.x + dir.x * offsetDistance, pos.y + heightOffset, pos.z + dir.z * offsetDistance);
 }
 
 function setupEventHandlers() {
@@ -461,7 +364,7 @@ function setupEventHandlers() {
       dist = 300 * getCamDistScale(); // scale default galaxy framing distance
     }
     camera.position.copy(target).add(dir.multiplyScalar(dist));
-    camLerp = 1; // avoid interpolation overriding this
+    focusState.camLerp = 1; // avoid interpolation overriding this
     controls && controls.update();
   };
   if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoomOnly);
@@ -1352,14 +1255,4 @@ function applyAccordionDefaults() {
     if (d.dataset.userSet === '1') return;
     d.open = shouldOpen;
   });
-}
-
-// Helper function to detect if device is actually mobile/touch
-function isTouchDevice() {
-  return 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
-}
-
-function getCamDistScale() {
-  const narrow = window.innerWidth <= 800 || (isTouchDevice() && window.innerWidth <= 1024);
-  return narrow ? Math.max(0.5, window.innerWidth / 800) : 1;
 }
