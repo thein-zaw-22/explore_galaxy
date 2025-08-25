@@ -272,6 +272,18 @@
       </div>
     </aside>
 
+    <!-- Mobile legend panel (responsive version of desktop legend) -->
+    <aside class="mobile-legend" id="mobileLegendPanel">
+      <div class="legend-title" id="mobileLegendTitle">Solar System quick facts</div>
+      <div class="legend-body">
+        <ul id="mobileLegendList">
+          <li>Sizes &amp; distances are <b>not to scale</b> (compressed for visibility).</li>
+          <li>Earth orbits the Sun in ~365 days; Neptune ~165 years.</li>
+          <li>Saturn's ring stylized; orbits shown as guides.</li>
+        </ul>
+      </div>
+    </aside>
+
   <!-- Load Three.js globally -->
   <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
   
@@ -283,5 +295,8 @@
   
   <!-- Mobile info toggle (shown on mobile) -->
   <button id="infoToggleFab" class="info-toggle" aria-label="Show info" title="Show info">ℹ️</button>
+  
+  <!-- Mobile legend toggle (shown on mobile) -->
+  <button id="legendToggleFab" class="legend-toggle" aria-label="Show facts" title="Show facts">📄</button>
 </body>
 </html>

@@ -19,6 +19,32 @@ export function updateLegend(mode) {
       <li><b>Rotation:</b> Sol orbits the galaxy every ~225-250 million years.</li>
       <li><b>Central Object:</b> Sagittarius A* - supermassive black hole (4M solar masses).</li>`;
   }
+  
+  // Also update mobile legend with same content
+  updateMobileLegend(mode);
+}
+
+// Mobile legend update function
+export function updateMobileLegend(mode) {
+  const mobileLegendTitle = document.getElementById("mobileLegendTitle");
+  const mobileLegendList = document.getElementById("mobileLegendList");
+  
+  if (mode === "solar") {
+    if (mobileLegendTitle) mobileLegendTitle.textContent = "Solar System quick facts";
+    if (mobileLegendList) mobileLegendList.innerHTML = `
+      <li>Sizes & distances are <b>not to scale</b> (compressed for visibility).</li>
+      <li>Earth orbits the Sun in ~365 days; Neptune ~165 years.</li>
+      <li>Saturn's ring stylized; orbits shown as guides.</li>`;
+  } else {
+    if (mobileLegendTitle) mobileLegendTitle.textContent = "Milky Way Galaxy facts";
+    if (mobileLegendList) mobileLegendList.innerHTML = `
+      <li><b>Diameter:</b> ~100,000 light-years across the spiral disk.</li>
+      <li><b>Thickness:</b> ~1,000 light-years in the disk, ~12,000 ly in the bulge.</li>
+      <li><b>Stars:</b> 200-400 billion stars in various stellar populations.</li>
+      <li><b>Sol Location:</b> Orion Arm, ~26,000 ly from galactic center.</li>
+      <li><b>Rotation:</b> Sol orbits the galaxy every ~225-250 million years.</li>
+      <li><b>Central Object:</b> Sagittarius A* - supermassive black hole (4M solar masses).</li>`;
+  }
 }
 
 export function setInfoFor(name, meta) {

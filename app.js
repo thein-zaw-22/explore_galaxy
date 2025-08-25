@@ -527,7 +527,9 @@ function setupEventHandlers() {
   // Mobile UI controls - slide menu and info toggle
   const uiToggleFab = document.getElementById('uiToggleFab');
   const infoToggleFab = document.getElementById('infoToggleFab');
+  const legendToggleFab = document.getElementById('legendToggleFab');
   const infoPanel = document.getElementById('infoPanel');
+  const mobileLegendPanel = document.getElementById('mobileLegendPanel');
   
   if (uiToggleFab) {
     uiToggleFab.addEventListener('click', () => {
@@ -588,6 +590,31 @@ function setupEventHandlers() {
     
     infoToggleFab.addEventListener('touchcancel', () => {
       infoToggleFab.style.transform = '';
+    });
+  }
+  
+  // Legend toggle for mobile
+  if (legendToggleFab && mobileLegendPanel) {
+    legendToggleFab.addEventListener('click', () => {
+      mobileLegendPanel.classList.toggle('visible');
+      // Update button icon based on state
+      legendToggleFab.innerHTML = mobileLegendPanel.classList.contains('visible') ? '✕' : '📄';
+      legendToggleFab.setAttribute('aria-label', 
+        mobileLegendPanel.classList.contains('visible') ? 'Hide facts' : 'Show facts'
+      );
+    });
+    
+    // Add touch feedback
+    legendToggleFab.addEventListener('touchstart', () => {
+      legendToggleFab.style.transform = 'translateY(-50%) scale(0.95)';
+    });
+    
+    legendToggleFab.addEventListener('touchend', () => {
+      legendToggleFab.style.transform = 'translateY(-50%)';
+    });
+    
+    legendToggleFab.addEventListener('touchcancel', () => {
+      legendToggleFab.style.transform = 'translateY(-50%)';
     });
   }
   

@@ -277,6 +277,57 @@ select {
   pointer-events: auto;
 }
 
+/* Mobile legend panel - Same style as desktop legend but for mobile */
+.mobile-legend {
+  position: fixed;
+  z-index: 999;
+  background: rgba(8,12,20,.9);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #e6e9ef;
+  font-size: 12px;
+  line-height: 1.45;
+  transition: all 0.3s ease;
+  
+  /* Mobile: left side, compact */
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: calc(20px + env(safe-area-inset-left));
+  max-width: calc(100vw - 40px);
+  width: 280px;
+  max-height: calc(50vh - 40px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  
+  /* Hide by default on mobile */
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+/* Show mobile legend when needed */
+.mobile-legend.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.legend-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 14px;
+  opacity: .9;
+}
+
+.mobile-legend ul {
+  margin: 8px 0 0 16px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Desktop: traditional bottom-left positioning, always visible */
 @media (min-width: 768px) {
   .info {
@@ -390,20 +441,15 @@ select {
   cursor: pointer;
   font-size: 18px;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   
-  /* Mobile: positioned to avoid overlap with slide menu */
+  /* Mobile: fixed right side position for both Show/Hide modes */
   top: calc(20px + env(safe-area-inset-top));
   right: calc(20px + env(safe-area-inset-right));
   display: flex;
-}
-
-/* When UI is visible (slide menu open), move FAB to avoid overlap */
-.ui:not(.hidden) ~ .fab {
-  right: calc(340px + 20px + env(safe-area-inset-right)); /* UI width + margin */
 }
 
 .fab:hover {
@@ -444,9 +490,9 @@ select {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   
-  /* Mobile: bottom-left */
+  /* Mobile: right side, below FAB */
   bottom: calc(20px + env(safe-area-inset-bottom));
-  left: calc(20px + env(safe-area-inset-left));
+  right: calc(20px + env(safe-area-inset-right));
   display: flex;
 }
 
@@ -460,10 +506,51 @@ select {
   transform: scale(0.95);
 }
 
+/* Legend toggle button for mobile */
+.legend-toggle {
+  position: fixed;
+  z-index: 1001;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(8,12,20,.8);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #e6e9ef;
+  border: 1px solid rgba(255,255,255,.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  
+  /* Mobile: right side, middle position */
+  top: 50%;
+  right: calc(20px + env(safe-area-inset-right));
+  transform: translateY(-50%);
+  display: flex;
+}
+
+.legend-toggle:hover {
+  background: rgba(8,12,20,.9);
+  border-color: rgba(255,255,255,.25);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.legend-toggle:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
 /* Hide mobile controls on desktop */
 @media (min-width: 768px) {
   .fab,
-  .info-toggle { 
+  .info-toggle,
+  .legend-toggle,
+  .mobile-legend { 
     display: none; 
   }
 }
@@ -478,17 +565,25 @@ select {
     font-size: 16px;
   }
   
-  /* When UI is visible on small screens */
-  .ui:not(.hidden) ~ .fab {
-    right: calc(320px + 16px + env(safe-area-inset-right)); /* Smaller UI width + margin */
-  }
-  
   .info-toggle {
     bottom: calc(16px + env(safe-area-inset-bottom));
-    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
     width: 40px;
     height: 40px;
     font-size: 14px;
+  }
+  
+  .legend-toggle {
+    right: calc(16px + env(safe-area-inset-right));
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+  
+  .mobile-legend {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    left: calc(16px + env(safe-area-inset-left));
+    width: calc(100vw - 32px);
   }
 }
 /* Accordion styles */
