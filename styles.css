@@ -528,21 +528,20 @@ select {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   
-  /* Mobile: right side, middle position */
-  top: 50%;
+  /* Mobile: bottom-right, above info toggle */
+  bottom: calc(80px + env(safe-area-inset-bottom)); /* info button height + margin */
   right: calc(20px + env(safe-area-inset-right));
-  transform: translateY(-50%);
   display: flex;
 }
 
 .legend-toggle:hover {
   background: rgba(8,12,20,.9);
   border-color: rgba(255,255,255,.25);
-  transform: translateY(-50%) scale(1.05);
+  transform: scale(1.05);
 }
 
 .legend-toggle:active {
-  transform: translateY(-50%) scale(0.95);
+  transform: scale(0.95);
 }
 
 /* Hide mobile controls on desktop */
@@ -574,6 +573,7 @@ select {
   }
   
   .legend-toggle {
+    bottom: calc(72px + env(safe-area-inset-bottom)); /* smaller info button + margin */
     right: calc(16px + env(safe-area-inset-right));
     width: 40px;
     height: 40px;

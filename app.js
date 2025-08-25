@@ -606,15 +606,15 @@ function setupEventHandlers() {
     
     // Add touch feedback
     legendToggleFab.addEventListener('touchstart', () => {
-      legendToggleFab.style.transform = 'translateY(-50%) scale(0.95)';
+      legendToggleFab.style.transform = 'scale(0.95)';
     });
     
     legendToggleFab.addEventListener('touchend', () => {
-      legendToggleFab.style.transform = 'translateY(-50%)';
+      legendToggleFab.style.transform = '';
     });
     
     legendToggleFab.addEventListener('touchcancel', () => {
-      legendToggleFab.style.transform = 'translateY(-50%)';
+      legendToggleFab.style.transform = '';
     });
   }
   
